@@ -59,11 +59,15 @@ class DoublePendulumEnv(core.Env):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
-    def reset(self):
-        high = np.array([np.pi / 2.0, np.pi/ 2.0, 0.5, .5])
-        self.state = self.np_random.uniform(low=-high, high=high)
-        if self.swingup:
-            self.state[0] += np.pi
+    def reset(self, state=None):
+        if state is None:
+            high = np.array([np.pi / 2.0, np.pi/ 2.0, 0.5, .5])
+            self.state = self.np_random.uniform(low=-high, high=high)
+            if self.swingup:
+                self.state[0] += np.pi
+        else:
+            self.state = state
+
         # Reset history
         self.end_effector_history = []
         return self._get_ob()
@@ -101,7 +105,7 @@ class DoublePendulumEnv(core.Env):
         return bool(-np.cos(s[0]) - np.cos(s[1] + s[0]) > 1.)
 
     def set_state(self, state):
-        self.state = np.asarray([state[0] + np.pi / 2.0, state[1], state[2], state[3]])
+        self.state = np.asarray([state[0] - np.pi / 2.0, state[1], state[2], state[3]])
 
     def _dsdt(self, s, u):
         m1 = self.LINK_MASS_1
