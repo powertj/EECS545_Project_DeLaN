@@ -33,7 +33,7 @@ class DoublePendulumEnv(core.Env):
     MAX_VEL_1 = 4 * np.pi
     MAX_VEL_2 = 4 * np.pi
 
-    MAX_TORQUE = 1.0
+    MAX_TORQUE = 2.0
     torque_noise_max = 0.
     swingup = False
 
@@ -53,6 +53,8 @@ class DoublePendulumEnv(core.Env):
                                        shape=(self.action_dim,),
                                        dtype=np.float32)
 
+        self.end_effector_history = []
+
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
@@ -62,6 +64,8 @@ class DoublePendulumEnv(core.Env):
         self.state = self.np_random.uniform(low=-high, high=high)
         if self.swingup:
             self.state[0] += np.pi
+        # Reset history
+        self.end_effector_history = []
         return self._get_ob()
 
     def step(self, a):
@@ -85,6 +89,7 @@ class DoublePendulumEnv(core.Env):
         terminal = False
         reward = None
 
+        self.end_effector_history.append(self.get_env_effector_pos())
         return (self._get_ob(), reward, terminal, {})
 
     def _get_ob(self):
@@ -94,6 +99,9 @@ class DoublePendulumEnv(core.Env):
     def _terminal(self):
         s = self.state
         return bool(-np.cos(s[0]) - np.cos(s[1] + s[0]) > 1.)
+
+    def set_state(self, state):
+        self.state = np.asarray([state[0] + np.pi / 2.0, state[1], state[2], state[3]])
 
     def _dsdt(self, s, u):
         m1 = self.LINK_MASS_1
@@ -155,6 +163,13 @@ class DoublePendulumEnv(core.Env):
 
         return np.array([dtheta1, dtheta2, ddtheta1, ddtheta2])
 
+    def get_env_effector_pos(self):
+        x = self.LINK_LENGTH_1 * np.cos(self.state[0] - np.pi / 2.0) +  \
+            self.LINK_LENGTH_2 * np.cos(self.state[0] + self.state[1] - np.pi / 2.0)
+        y = self.LINK_LENGTH_1 * np.sin(self.state[0] - np.pi / 2.0) + \
+            self.LINK_LENGTH_2 * np.sin(self.state[0] + self.state[1] - np.pi / 2.0)
+        return np.asarray([-x, -y])
+
     def render(self, mode='human'):
         from gym.envs.classic_control import rendering
 
@@ -181,14 +196,18 @@ class DoublePendulumEnv(core.Env):
 
         self.viewer.draw_line((-2.2, 1), (2.2, 1))
         for ((x, y), th, llen) in zip(xys, thetas, link_lengths):
-            l, r, t, b = 0, llen, .1, -.1
+            l, r, t, b = 0, llen, .01, -.01
             jtransform = rendering.Transform(rotation=th, translation=(x, y))
             link = self.viewer.draw_polygon([(l, b), (l, t), (r, t), (r, b)])
             link.add_attr(jtransform)
             link.set_color(8., .3, .3)
-            circ = self.viewer.draw_circle(.1)
+            circ = self.viewer.draw_circle(.01)
             circ.set_color(0, 0, 0)
             circ.add_attr(jtransform)
+
+        # Draw end effectory history
+        for xy1, xy2 in zip(self.end_effector_history[:-1], self.end_effector_history[1:]):
+            self.viewer.draw_line(xy1, xy2, color=(0, 0, 1))
 
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
