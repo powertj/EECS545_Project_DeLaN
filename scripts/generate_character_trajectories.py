@@ -40,7 +40,7 @@ def convert_trajectory(trajectory, sample_rate=200):
         # q_dot
         v = trajectory[i, :2]
         q_d = np.linalg.solve(J(q), v)
-        q += q_d / 200.0
+        q += q_d / sample_rate
         q_dot.append(q_d)
 
     q_dot = np.asarray(q_dot)
