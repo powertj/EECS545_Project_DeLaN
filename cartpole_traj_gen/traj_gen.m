@@ -44,26 +44,6 @@ Vf = mpc.getCasadiFunc(@(x) termcost(x,zg,Pinf), [Nx], {'x'}, {'Vf'});
 lb = struct();
 lb.x = [-Inf*ones(1,Nt+1);pi/2*ones(1,Nt+1);-2*ones(2,Nt+1)];
 lb.u = -50*ones(Nu,Nt);
-options = optimset('TolFun',1e-10);
-while growing
-    K = construct_kth_gain(k,Ac,Bc,Cc,Dc);
-    f = [K; -K];
-    for i=1:size(f,1)
-        [~,feval] = linprog(-f(i,:).',G,W,[],[],[],[],options);
-        feval = feval + W(i);
-        if feval >= 0
-            % done
-            kstar = k;
-            growing = 0;
-            break;
-        end
-    end
-    if growing
-        G = [G; K; -K];
-        W = [W; upper_limits; -lower_limits];
-        k = k + 1;
-    end
-end
 ub = struct();
 ub.x = [Inf*ones(1,Nt+1);3*pi/2*ones(1,Nt+1);2*ones(2,Nt+1)];
 ub.u = 50*ones(Nu,Nt);
