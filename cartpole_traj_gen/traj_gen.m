@@ -1,10 +1,10 @@
 add_casadi_mpctools;
 
 % cartpole params
-params.M = 10;
-params.m = 1;
-params.l = 1;
-params.g = 9.81;
+params.M = 10; % mass of cart
+params.m = 1; % mass of pendulum
+params.l = 1; % pendulum length
+params.g = 9.81; % gravity
 
 % initial state
 z0 = [0 pi 0 0].';
@@ -44,7 +44,26 @@ Vf = mpc.getCasadiFunc(@(x) termcost(x,zg,Pinf), [Nx], {'x'}, {'Vf'});
 lb = struct();
 lb.x = [-Inf*ones(1,Nt+1);pi/2*ones(1,Nt+1);-2*ones(2,Nt+1)];
 lb.u = -50*ones(Nu,Nt);
-
+options = optimset('TolFun',1e-10);
+while growing
+    K = construct_kth_gain(k,Ac,Bc,Cc,Dc);
+    f = [K; -K];
+    for i=1:size(f,1)
+        [~,feval] = linprog(-f(i,:).',G,W,[],[],[],[],options);
+        feval = feval + W(i);
+        if feval >= 0
+            % done
+            kstar = k;
+            growing = 0;
+            break;
+        end
+    end
+    if growing
+        G = [G; K; -K];
+        W = [W; upper_limits; -lower_limits];
+        k = k + 1;
+    end
+end
 ub = struct();
 ub.x = [Inf*ones(1,Nt+1);3*pi/2*ones(1,Nt+1);2*ones(2,Nt+1)];
 ub.u = 50*ones(Nu,Nt);
@@ -95,8 +114,15 @@ end
 % traj is x, theta, x_dot, theta_dot, x_ddot, theta_ddot
 traj = zeros(6,Nsim);
 traj(1:2,:) = data.x(1:2,1:end-1);
+H = zeros(2,2,Nsim);
+G = zeros(2,Nsim);
+U = zeros(1,Nsim);
 for i=1:Nsim
     traj(3:6,i) = cartpole_dynamics(data.x(:,i), data.u(:,i), params);
+    U(i) = data.u(:,i);
+    G(2,i) = params.m * params.g * params.l * sin(traj(2,i));
+    H(:,:,i) = [params.m + params.M, params.m * params.l * cos(traj(2,i)); ...
+        params.m * params.l * cos(traj(2,i)), params.m * params.l^2];
 end
 
-save('cartpole_traj_out.mat', 'traj')
+save('cartpole_traj_out.mat', 'traj', 'U', 'G', 'H')
