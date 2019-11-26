@@ -104,7 +104,7 @@ if __name__ =='__main__':
 
     trajectories, labels, key = load_data()
 
-    num_trajectories_to_save = 100
+    # num_trajectories_to_save = 100
 
     joint_trajectories = []
     M_list = []
@@ -117,8 +117,8 @@ if __name__ =='__main__':
 
     # It takes a minutes or two so wanted to print out status
     for i, trajectory in enumerate(trajectories.flatten()):
-        if i > num_trajectories_to_save:
-            break
+        # if i > num_trajectories_to_save:
+        #     break
         print("Converting trajectory #", str(i))
         trajectory_joint_space = convert_trajectory(trajectory.T)
         trajectory_M, trajectory_c, trajectory_g, trajectory_tau = trajectory_torque(trajectory_joint_space)
@@ -151,7 +151,7 @@ if __name__ =='__main__':
                                                     keys = key,
                                                     torques = tau_list
                                                     )
-    np.savez('../data/trajectories_train_joint_space.npz', trajectories = joint_trajectories_concat,
-                                                    torques = tau_list_concat
-                                                    )
+    # np.savez('../data/trajectories_train_joint_space.npz', trajectories = joint_trajectories_concat,
+    #                                                 torques = tau_list_concat
+    #                                                 )
 
