@@ -117,6 +117,29 @@ def evaluate(model, loader): # Evaluate accuracy on validation / test set
     print("Average Evaluation MSE: {}".format(Ave_MSE))
     return Ave_MSE
 
+def get_ff_network():
+    # Load the dataset and train and test splits
+    print("Loading dataset...")
+    data = np.load('../data/trajectories_joint_space.npz', allow_pickle=True)
+    train_trajectories, test_trajectories = generate_train_test_indices(data, num_train_chars=2, num_samples_per_char=2)
+    TRAJ_train = TrajectoryDataset(data,train_trajectories)
+    TRAJ_test = TrajectoryDataset(data,test_trajectories)
+    print("Done!")
+    trainloader = DataLoader(TRAJ_train, batch_size=None)
+    testloader = DataLoader(TRAJ_test, batch_size=None)
+
+    # create model and specify hyperparameters
+    device = "cuda" if torch.cuda.is_available() else "cpu" # Configure device
+    model = Reacer_FF_Network().to(device)
+    criterion = nn.MSELoss() # Specify the loss layer
+    # TODO: Modify the line below, experiment with different optimizers and parameters (such as learning rate)
+    optimizer = optim.Adam(model.parameters(), lr=5e-3, weight_decay=1e-4) # Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
+    num_epoch = 50 # TODO: Choose an appropriate number of training epochs
+
+    # train and evaluate network
+    train(model, trainloader, num_epoch)
+    return model
+
 if __name__ == '__main__':
     # Load the dataset and train and test splits
     print("Loading dataset...")
