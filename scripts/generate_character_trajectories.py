@@ -86,9 +86,9 @@ def trajectory_torque(trajectory_joint_space):
     for i in range(n):
 
         M_i = M(q[i,:])
-        L_i = np.linalg.cholesky(M_i)
-        if L_i[1,0] < 0:
-            print("Negative")
+        # L_i = np.linalg.cholesky(M_i)
+        # if L_i[1,0] < 0:
+        #     print("Negative")
         c_i = c(q[i,:], q_dot[i,:])
         g_i = g(q[i,:])
         tau_i = torque(q_ddot[[i],:].T, M_i, c_i, g_i)
@@ -103,9 +103,6 @@ def trajectory_torque(trajectory_joint_space):
 if __name__ =='__main__':
 
     trajectories, labels, key = load_data()
-
-    num_trajectories_to_save = 100
-
     joint_trajectories = []
     M_list = []
     c_list = []
@@ -117,19 +114,17 @@ if __name__ =='__main__':
 
     # It takes a minutes or two so wanted to print out status
     for i, trajectory in enumerate(trajectories.flatten()):
-        if i > num_trajectories_to_save:
-            break
         print("Converting trajectory #", str(i))
         trajectory_joint_space = convert_trajectory(trajectory.T)
         trajectory_M, trajectory_c, trajectory_g, trajectory_tau = trajectory_torque(trajectory_joint_space)
 
         # create concatenated dataset for neural network training
-        if i == 0:
-            joint_trajectories_concat = trajectory_joint_space
-            tau_list_concat = trajectory_tau
-        else:
-            joint_trajectories_concat = np.vstack((joint_trajectories_concat,trajectory_joint_space))
-            tau_list_concat = np.vstack((tau_list_concat,trajectory_tau))
+        # if i == 0:
+        #     joint_trajectories_concat = trajectory_joint_space
+        #     tau_list_concat = trajectory_tau
+        # else:
+        #     joint_trajectories_concat = np.vstack((joint_trajectories_concat,trajectory_joint_space))
+        #     tau_list_concat = np.vstack((tau_list_concat,trajectory_tau))
 
         joint_trajectories.append(trajectory_joint_space)
         M_list.append(trajectory_M)
@@ -149,9 +144,12 @@ if __name__ =='__main__':
     np.savez('../data/trajectories_joint_space.npz', trajectories = joint_trajectories, 
                                                     labels = labels,
                                                     keys = key,
-                                                    torques = tau_list
+                                                    torques = tau_list,
+                                                    H = M_list,
+                                                    c = c_list,
+                                                    g = g_list
                                                     )
-    np.savez('../data/trajectories_train_joint_space.npz', trajectories = joint_trajectories_concat,
-                                                    torques = tau_list_concat
-                                                    )
+    # np.savez('../data/trajectories_train_joint_space.npz', trajectories = joint_trajectories_concat,
+    #                                                 torques = tau_list_concat
+    #                                                 )
 

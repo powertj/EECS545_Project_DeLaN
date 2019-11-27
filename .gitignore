@@ -3,3 +3,4 @@
 *.m~
 cartpole_traj_gen/add_casadi_mpctools.m
 *.vscode/
+scripts/tempCodeRunnerFile.py
