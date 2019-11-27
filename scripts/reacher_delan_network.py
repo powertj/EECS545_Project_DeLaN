@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
 from tqdm import tqdm # Displays a progress bar
 
 import torch
@@ -10,85 +9,48 @@ import torch.nn.functional as F
 from torchvision import datasets, transforms
 from torch.utils.data import TensorDataset, Dataset, Subset, DataLoader, random_split
 import random
+from dataset import TrajectoryDataset
 # torch.manual_seed(0) # Fix random seed for reproducibility
 
+def generate_train_test_indices(data, num_train_chars=1, num_samples_per_char=1):
+    char_count = {}
+    char_indices = {}
+    train_chars = []
+    test_chars = []
+    train_trajectories = []
+    test_trajectories = []
 
-# Load the dataset and train, val, test splits
-print("Loading dataset...")
+    for i, label in enumerate(data['labels']):
+        idx = label[0]
+        letter = data['keys'][idx-1][0]
+        if letter in char_count:
+            char_count[letter] += 1
+            char_indices[letter].append(i)
 
-data = np.load('../data/trajectories_joint_space.npz',allow_pickle=True)
-char_count = {}
-char_indices = {}
-test_chars = []
-train_trajectories = []
-test_trajectories = []
+        else:
+            test_chars.append(letter)
+            char_count[letter] = 1
+            char_indices[letter] = [i]
 
-for i, label in enumerate(data['labels']):
-    idx = label[0]
-    letter = data['keys'][idx-1][0]
-    if letter in char_count:
-        char_count[letter] += 1
-        char_indices[letter].append(i)
+    for i in range(num_train_chars):
+        if len(test_chars) > 0:
+            train_char_idx = random.randint(0,len(test_chars)-1)
+            train_char = test_chars.pop(train_char_idx)
+            train_chars.append(train_char)
+            if num_samples_per_char < len(char_indices[train_char]):
+                train_trajectories += char_indices[train_char][:num_samples_per_char]
+            else:
+                train_trajectories += char_indices[train_char]
 
-    else:
-        test_chars.append(letter)
-        char_count[letter] = 1
-        char_indices[letter] = [i]
+    for test_char in test_chars:
+            if num_samples_per_char < len(char_indices[test_char]):
+                test_trajectories += char_indices[test_char][:num_samples_per_char]
+            else:
+                test_trajectories += char_indices[test_char]
 
-num_train_chars = 1
-train_chars = []
+    return train_trajectories, test_trajectories
 
-for i in range(num_train_chars):
-    if len(test_chars) > 0:
-        train_char_idx = random.randint(0,len(test_chars)-1)
-        train_char = test_chars.pop(train_char_idx)
-        train_chars.append(train_char)
-        train_trajectories.append(random.choice(char_indices[train_char]))
-
-for test_char in test_chars:
-        test_trajectories.append(random.choice(char_indices[test_char]))
-
-# create training dataset
-for count, i in enumerate(train_trajectories):
-    if count == 0:
-        joint_trajectories_concat = torch.from_numpy(data['trajectories'][i]).float()
-        tau_list_concat = torch.from_numpy(data['torques'][i]).float()
-    else:
-        joint_trajectories_concat = torch.cat((joint_trajectories_concat,torch.from_numpy(data['trajectories'][i]).float()),dim=0)
-        tau_list_concat = torch.cat((tau_list_concat,torch.from_numpy(data['torques'][i]).float()),dim=0)
-
-TRAJ_train = TensorDataset(joint_trajectories_concat,tau_list_concat)
-
-# create validation dataset
-# for count, i in enumerate(val_characters):
-#     if count == 0:
-#         joint_trajectories_concat = torch.from_numpy(data['trajectories'][i]).float()
-#         tau_list_concat = torch.from_numpy(data['torques'][i]).float()
-#     else:
-#         joint_trajectories_concat = torch.cat((joint_trajectories_concat,torch.from_numpy(data['trajectories'][i]).float()),dim=0)
-#         tau_list_concat = torch.cat((tau_list_concat,torch.from_numpy(data['torques'][i]).float()),dim=0)
-
-# TRAJ_val = TensorDataset(joint_trajectories_concat,tau_list_concat)
-
-# create testing dataset
-for count, i in enumerate(test_trajectories):
-    if count == 0:
-        joint_trajectories_concat = torch.from_numpy(data['trajectories'][i]).float()
-        tau_list_concat = torch.from_numpy(data['torques'][i]).float()
-    else:
-        joint_trajectories_concat = torch.cat((joint_trajectories_concat,torch.from_numpy(data['trajectories'][i]).float()),dim=0)
-        tau_list_concat = torch.cat((tau_list_concat,torch.from_numpy(data['torques'][i]).float()),dim=0)
-
-TRAJ_test = TensorDataset(joint_trajectories_concat,tau_list_concat)
-
-print("Done!")
-
-# Create dataloaders
-trainloader = DataLoader(TRAJ_train, batch_size=192, shuffle=False)
-# valloader = DataLoader(TRAJ_val, batch_size=192, shuffle=False)
-testloader = DataLoader(TRAJ_test, batch_size=192, shuffle=False)
-
-class Network(nn.Module):
+class Reacher_DeLaN_Network(nn.Module):
     def __init__(self):
         super().__init__()
         # TODO: Design your own network, define layers here.
@@ -121,12 +83,11 @@ class Network(nn.Module):
         # torch.nn.init.zeros_(self.fc4.bias)
 
     def forward(self,x):
-        # TODO: Design your own network, implement forward pass here
         d = x.shape[1] // 3
         n = x.shape[0]
         q, q_dot, q_ddot = torch.split(x,[d,d,d], dim = 1)
 
-        q.requires_grad = True
+        # q.requires_grad = True
         h1 = F.relu(self.fc1(q))
         h2 = F.relu(self.fc1a(h1))
         
@@ -146,11 +107,6 @@ class Network(nn.Module):
         dRelu_fc3 = torch.where(ld > 0, torch.ones(ld.shape), torch.zeros(ld.shape))
         dld_dh2 = torch.diag_embed(dRelu_fc3) @ self.fc3.weight
         dlo_dh2 = self.fc4.weight
-
-        # dld_dh1 = torch.cat([dld_dh1,torch.zeros(n,d,self.fc4.weight.T.shape[0])],dim=2)
-        # dlo_dh1 = torch.cat([torch.zeros(n,1,d),torch.stack(n * [self.fc4.weight.T.T])],dim=2)
-        # dh2_dh1 = torch.cat([dh2_dh1,torch.cat([torch.zeros(n,1,d),torch.stack(n * [self.fc4.weight.T.T])],dim=2)],dim=1)
-        # dl_dq = dh2_dh1 @ dh1_dq
         
         dld_dq = dld_dh2 @ dh2_dh1 @ dh1_dq
         dlo_dq = dlo_dh2 @ dh2_dh1 @ dh1_dq
@@ -166,6 +122,7 @@ class Network(nn.Module):
         dL_dqi = torch.tril(torch.ones(n,d,d,d)) - torch.eye(d)
 
         L = torch.tril(torch.ones(n,d,d)) - torch.eye(d)
+
         indices = dL_dt == 1
         indices_dL_dqi = dL_dqi == 1
 
@@ -178,25 +135,20 @@ class Network(nn.Module):
         dL_dqi += torch.diag_embed(dld_dqi.view(n,d,d))
 
         # Mass Matrix
-        epsilon = .00001
+        epsilon = .00001    #small number to ensure positive definiteness of H
+
         H = L.permute(0,2,1) @ L + epsilon * torch.eye(d)
 
         # Time derivative of Mass Matrix
         dH_dt = L @ dL_dt.permute(0,2,1) + dL_dt @ L.permute(0,2,1)
 
         quadratic_term = q_dot.view(n,1,1,d) @ (dL_dqi @ L.permute(0,2,1).view(n,1,d,d) + L.view(n,1,d,d) @ dL_dqi.permute(0,1,3,2)) @ q_dot.view(n,1,d,1)
-        tau =  H @ q_ddot.view(n,d,1) + dH_dt @ q_dot.view(n,d,1) + quadratic_term.view(n,d,1) + g.view(n,d,1)
+        c = dH_dt @ q_dot.view(n,d,1) + quadratic_term.view(n,d,1)
+
+        tau =  H @ q_ddot.view(n,d,1) + c + g.view(n,d,1)
 
         # The loss layer will be applied outside Network class
-        return tau.squeeze()
-
-
-device = "cuda" if torch.cuda.is_available() else "cpu" # Configure device
-model = Network().to(device)
-criterion = nn.MSELoss() # Specify the loss layer
-# TODO: Modify the line below, experiment with different optimizers and parameters (such as learning rate)
-optimizer = optim.Adam(model.parameters(), lr=5e-2, weight_decay=1e-4) # Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
-num_epoch = 300 # TODO: Choose an appropriate number of training epochs
+        return (tau.squeeze(), H.squeeze(), c.squeeze(), g.squeeze())
 
 def train(model, loader, num_epoch = 10): # Train the model
     print("Start training...")
@@ -207,8 +159,8 @@ def train(model, loader, num_epoch = 10): # Train the model
             batch = batch.to(device)
             label = label.to(device)
             optimizer.zero_grad() # Clear gradients from the previous iteration
-            pred = model(batch.view(batch.shape[0],-1)) # This will call Network.forward() that you implement
-            loss = criterion(pred, label) # Calculate the loss
+            pred_tau, pred_H, pred_c, pred_g = model(batch) # This will call Network.forward() that you implement
+            loss = criterion(pred_tau, label) # Calculate the loss
             running_loss.append(loss.item())
             loss.backward() # Backprop gradients to all tensors in the network
             optimizer.step() # Update trainable weights
@@ -223,10 +175,10 @@ def evaluate(model, loader): # Evaluate accuracy on validation / test set
         for batch, label in tqdm(loader):
             batch = batch.to(device)
             label = label.to(device)
-            pred = model(batch.view(batch.shape[0],-1))
-            MSE_error = criterion(pred, label)
+            pred_tau, pred_H, pred_c, pred_g = model(batch)
+            MSE_error = criterion(pred_tau, label)
             MSEs.append(MSE_error.item())
-            fig, axs = plt.subplots(2, sharex=True)
+            # fig, axs = plt.subplots(2, sharex=True)
             # axs[0].plot(label[:,0],label='Calculated',color='b')
             # axs[0].plot(pred[:,0],label='Predicted',color='r')
             # axs[0].legend()
@@ -244,6 +196,24 @@ def evaluate(model, loader): # Evaluate accuracy on validation / test set
     return Ave_MSE
 
 if __name__ == '__main__':
+    # Load the dataset and train and test splits
+    print("Loading dataset...")
+    data = np.load('../data/trajectories_joint_space.npz', allow_pickle=True)
+    train_trajectories, test_trajectories = generate_train_test_indices(data, num_train_chars=2, num_samples_per_char=2)
+    TRAJ_train = TrajectoryDataset(data,train_trajectories)
+    TRAJ_test = TrajectoryDataset(data,test_trajectories)
+    print("Done!")
+    trainloader = DataLoader(TRAJ_train, batch_size=None)
+    testloader = DataLoader(TRAJ_test, batch_size=None)
+
+    # create model and specify hyperparameters
+    device = "cuda" if torch.cuda.is_available() else "cpu" # Configure device
+    model = Reacher_DeLaN_Network().to(device)
+    criterion = nn.MSELoss() # Specify the loss layer
+    # TODO: Modify the line below, experiment with different optimizers and parameters (such as learning rate)
+    optimizer = optim.Adam(model.parameters(), lr=5e-2, weight_decay=1e-4) # Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
+    num_epoch = 50 # TODO: Choose an appropriate number of training epochs
+
+    # train and evaluate network
     train(model, trainloader, num_epoch)
-    # evaluate(model, valloader)
     evaluate(model, testloader)
