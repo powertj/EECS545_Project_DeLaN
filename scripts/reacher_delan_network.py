@@ -130,12 +130,19 @@ class Reacher_DeLaN_Network(nn.Module):
         dL_dqi = []
         zeros = torch.zeros_like(ld)
         zeros_2 = torch.zeros_like(dld_dqi)
+        lo_start = 0
+        lo_end = d - 1
         for i in range(d):
-            l = torch.cat((zeros[:, :i].view(n, -1), ld[:, i].view(-1, 1), lo[:, :d-i-1]), dim=1)
-            dl_dt = torch.cat((zeros[:, :i].view(n, -1), dld_dt[:, i].view(-1, 1), dlo_dt[:, :d-i-1].view(n, -1)), dim=1)
+            l = torch.cat((zeros[:, :i].view(n, -1), ld[:, i].view(-1, 1), lo[:, lo_start:lo_end]), dim=1)
+            dl_dt = torch.cat((zeros[:, :i].view(n, -1), dld_dt[:, i].view(-1, 1),
+                               dlo_dt[:, lo_start:lo_end].view(n, -1)), dim=1)
 
             dl_dqi = torch.cat((zeros_2[:, :, :i].view(n, d, -1), dld_dqi[:, :, i].view(n, -1, 1),
-                                dlo_dqi[:, :, :d-i-1].view(n, d, -1)), dim=2)
+                                dlo_dqi[:, :, lo_start:lo_end].view(n, d, -1)), dim=2)
+
+            lo_start = lo_start + lo_end
+            lo_end = lo_end + d - 2
+
             L.append(l)
             dL_dt.append(dl_dt)
             dL_dqi.append(dl_dqi)
