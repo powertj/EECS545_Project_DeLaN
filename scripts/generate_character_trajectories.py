@@ -78,7 +78,7 @@ def trajectory_torque(trajectory_joint_space):
 
     n, d = q.shape
 
-    M_list = np.zeros((n,d**2))
+    M_list = np.zeros((n,d,d))
     c_list = np.zeros((n,d))
     g_list = np.zeros((n,d))
     tau_list = np.zeros((n,d))
@@ -93,7 +93,7 @@ def trajectory_torque(trajectory_joint_space):
         g_i = g(q[i,:])
         tau_i = torque(q_ddot[[i],:].T, M_i, c_i, g_i)
 
-        M_list[i,:] = M_i.reshape((1,d**2))
+        M_list[i,:,:] = M_i
         c_list[i,:] = c_i.reshape((1,d))
         g_list[i,:] = g_i.reshape((1,d))
         tau_list[i,:] = tau_i.reshape((1,d))
