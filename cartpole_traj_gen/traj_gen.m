@@ -1,108 +1,23 @@
 add_casadi_mpctools;
 
-% cartpole params
-params.M = 10; % mass of cart
-params.m = 1; % mass of pendulum
-params.l = 1; % pendulum length
-params.g = 9.81; % gravity
-
-% initial state
-z0 = [0 pi 0 0].';
-
-% final state
-zg = [5 pi 0 0].';
-
-% controller frequency
-Ts = 1/20;
-
 mpc = import_mpctools();
-usecollocation = false();
 
-% model
-Nsim = floor(15/Ts);
-Nx = 4;
-Nu = 1;
-Nt = 30; % prediction horizon
-
-% build system model
-dint = mpc.getCasadiIntegrator(@(x,u) cartpole_dynamics(x,u,params), Ts, [Nx,Nu], {'x', 'u'}, {'dint'});
-kwargs = struct('funcname', 'ode', 'rk4', true(), 'Delta', Ts);
-Nc = 0;
-
-% controller model (nonlinear and linear)
-fnonlin = mpc.getCasadiFunc(@(x,u) cartpole_dynamics(x,u,params), [Nx, Nu], {'x', 'u'}, '**', kwargs);
-linmodel = mpc.getLinearizedModel(fnonlin, {zg, zeros(Nu, 1)}, {'A', 'B'});
-
-% define costs
-Q = diag([5, 1, 1, 1]);
-R = 0.01;
-[Pinf, ~, ~] = idare(linmodel.A,linmodel.B,Q,R);
-l = mpc.getCasadiFunc(@(x,u) stagecost(x,u,zg,Q,R), [Nx, Nu], {'x', 'u'}, {'l'});
-Vf = mpc.getCasadiFunc(@(x) termcost(x,zg,Pinf), [Nx], {'x'}, {'Vf'});
-
-% define constraints
-lb = struct();
-lb.x = [-Inf*ones(1,Nt+1);pi/2*ones(1,Nt+1);-2*ones(2,Nt+1)];
-lb.u = -50*ones(Nu,Nt);
-ub = struct();
-ub.x = [Inf*ones(1,Nt+1);3*pi/2*ones(1,Nt+1);2*ones(2,Nt+1)];
-ub.u = 50*ones(Nu,Nt);
-
-% build solvers
-N = struct('x', Nx, 'u', Nu, 't', Nt);
-kwargs = struct('l', l, 'Vf', Vf, 'lb', lb, 'ub', ub, 'verbosity', 0);
-
-NLMPC_solver = mpc.nmpc('f', fnonlin, 'N', N, 'Delta', Ts, '**', kwargs);
-
-% simulate closed loop
-x = NaN(Nx, Nsim+1);
-x(:,1) = z0;
-u = NaN(Nu, Nsim);
-for k=1:Nsim
-    NLMPC_solver.fixvar('x', 1, x(:,k));
-    NLMPC_solver.solve();
-    if ~isequal(NLMPC_solver.status, 'Solve_Succeeded')
-        warning('Solver failed at time %d!', k);
-        break
+goal_x = 1:0.1:2;
+sim_length = 20*25;
+trajs = zeros(Nsim,sim_length,6);
+Hs = zeros(Nsim,sim_length,2,2);
+Gs = zeros(Nsim,sim_length,2);
+Us = zeros(Nsim,sim_length,2);
+for k=1:length(goal_x)
+    data = run_mpc_sim([goal_x(k); pi; 0; 0], sim_length, mpc);
+    trajs(k,:,1:2) = data.x(1:2,1:end-1).';
+    for i=1:sim_length
+        trajs(k,i,3:6) = cartpole_dynamics(data.x(:,i), data.u(:,i), params).';
+        Us(k,i,:) = [data.u(:,i) 0];
+        Gs(k,i,2) = params.m * params.g * params.l * sin(trajs(k,i,2));
+        Hs(k,i,:,:) = [params.m + params.M, params.m * params.l * cos(trajs(k,i,2)); ...
+            params.m * params.l * cos(trajs(k,i,2)), params.m * params.l^2];
     end
-    u(:,k) = NLMPC_solver.var.u(:,1);
-    x(:,k+1) = full(dint(x(:,k), u(:,k))); % simulate underlying dynamics
-end
-data = struct('x', x, 'u', u, 't', Ts*(0:Nsim));
-
-if 1  % change to 0 to not plot
-    figure(1)
-    clf
-    title('Nonlinear MPC cartpole')
-
-    subplot(2,1,1)
-    hold on
-    %plot([0 100 100 200], [0 0 0.5 0.5; 0 0 0 0; 0 0 -0.5 -0.5], 'k--', 'LineWidth', 1.5)
-    p = plot(data.t, data.x, 'LineWidth', 2);
-    legend(p, {'$$x$$', '$$\theta$$', '$$\dot{x}$$', '$$\dot{\theta}$$'}, 'Interpreter', 'latex', 'FontSize', 12)
-    xlabel('time (s)')
-
-    subplot(2,1,2)
-    hold on
-    %plot([0 200 NaN 0 200], [0.03 0.03 NaN -0.03 -0.03], 'k--', 'LineWidth', 1.5)
-    p = plot(data.t(1:Nsim), data.u, 'LineWidth', 2);
-    legend(p, {'u'}, 'Interpreter', 'latex', 'FontSize', 12)
-    xlabel('time (s)')
 end
 
-% write data
-% traj is x, theta, x_dot, theta_dot, x_ddot, theta_ddot
-traj = zeros(6,Nsim);
-traj(1:2,:) = data.x(1:2,1:end-1);
-H = zeros(2,2,Nsim);
-G = zeros(2,Nsim);
-U = zeros(1,Nsim);
-for i=1:Nsim
-    traj(3:6,i) = cartpole_dynamics(data.x(:,i), data.u(:,i), params);
-    U(i) = data.u(:,i);
-    G(2,i) = params.m * params.g * params.l * sin(traj(2,i));
-    H(:,:,i) = [params.m + params.M, params.m * params.l * cos(traj(2,i)); ...
-        params.m * params.l * cos(traj(2,i)), params.m * params.l^2];
-end
-
-save('cartpole_traj_out.mat', 'traj', 'U', 'G', 'H')
+save('cartpole_traj_out.mat', 'trajs', 'Us', 'Gs', 'Hs')

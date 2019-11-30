@@ -1,6 +1,8 @@
 /delan.egg-info/
 .idea
 *.m~
+*.asv
 cartpole_traj_gen/add_casadi_mpctools.m
+cartpole_traj_gen/cartpole_traj_out.mat
 *.vscode/
 scripts/tempCodeRunnerFile.py
