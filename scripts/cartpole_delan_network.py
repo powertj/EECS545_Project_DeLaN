@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.io import loadmat
 from tqdm import tqdm # Displays a progress bar
-
 import torch
 from torch import nn
 from torch import optim
@@ -12,46 +12,15 @@ import random
 from dataset import TrajectoryDataset
 # torch.manual_seed(0) # Fix random seed for reproducibility
 
-def generate_train_test_indices(data, num_train_chars=1, num_samples_per_char=1):
-    char_count = {}
-    char_indices = {}
-    train_chars = []
-    test_chars = []
-    train_trajectories = []
-    test_trajectories = []
+def generate_train_test_indices(data, num_train_trajectories=1):
+    indices = np.arange(data['trajectories'].shape[0])
+    train_trajectories = np.random.choice(indices,size=num_train_trajectories,replace=False)
+    test_trajectories = np.delete(indices, train_trajectories,axis=0)
 
-    for i, label in enumerate(data['labels']):
-        idx = label[0]
-        letter = data['keys'][idx-1][0]
-        if letter in char_count:
-            char_count[letter] += 1
-            char_indices[letter].append(i)
-
-        else:
-            test_chars.append(letter)
-            char_count[letter] = 1
-            char_indices[letter] = [i]
-
-    for i in range(num_train_chars):
-        if len(test_chars) > 0:
-            train_char_idx = random.randint(0,len(test_chars)-1)
-            train_char = test_chars.pop(train_char_idx)
-            train_chars.append(train_char)
-            if num_samples_per_char < len(char_indices[train_char]):
-                train_trajectories += char_indices[train_char][:num_samples_per_char]
-            else:
-                train_trajectories += char_indices[train_char]
-
-    for test_char in test_chars:
-            if num_samples_per_char < len(char_indices[test_char]):
-                test_trajectories += char_indices[test_char][:num_samples_per_char]
-            else:
-                test_trajectories += char_indices[test_char]
-
-    return train_trajectories, test_trajectories
+    return list(train_trajectories), list(test_trajectories)
 
 
-class Reacher_DeLaN_Network(nn.Module):
+class CartPole_DeLaN_Network(nn.Module):
     def __init__(self):
         super().__init__()
         # TODO: Design your own network, define layers here.
@@ -208,7 +177,7 @@ def train(model, loader, num_epoch, optimizer, scheduler): # Train the model
 def evaluate(model, loader): # Evaluate accuracy on validation / test set
     model.eval() # Set the model to evaluation mode
     MSEs = []
-    num_plots= 2
+    num_plots= 4
     i = 0
     with torch.no_grad(): # Do not calculate grident to speed up computation
         for batch, label, g, c, h in tqdm(loader):
@@ -249,7 +218,7 @@ def evaluate(model, loader): # Evaluate accuracy on validation / test set
                 axs[1,3].plot(g[:,1],label='Calculated',color='b')
                 axs[1,3].plot(pred_g[:,1],label='Predicted',color='r')
                 axs[1,3].set_xlabel('Time Step')
-                fig.suptitle('Reacher DeLaN Network')
+                fig.suptitle('CartPole DeLaN Network')
                 plt.show()
                 plt.close()
                 i += 1
@@ -263,8 +232,9 @@ if __name__ == '__main__':
 
     # Load the dataset and train and test splits
     print("Loading dataset...")
-    data = np.load('../data/trajectories_joint_space.npz', allow_pickle=True)
-    train_trajectories, test_trajectories = generate_train_test_indices(data, num_train_chars=10, num_samples_per_char=2)
+    fname = '../cartpole_traj_gen/data/cartpole_trajs_goal_1_to_2.mat'
+    data = loadmat(fname)
+    train_trajectories, test_trajectories = generate_train_test_indices(data, num_train_trajectories=4)
     TRAJ_train = TrajectoryDataset(data,train_trajectories)
     TRAJ_test = TrajectoryDataset(data,test_trajectories)
 
@@ -274,14 +244,13 @@ if __name__ == '__main__':
 
     # create model and specify hyperparameters
     device = "cuda" if torch.cuda.is_available() else "cpu" # Configure device
-    model = Reacher_DeLaN_Network().to(device)
+    model = CartPole_DeLaN_Network().to(device)
     criterion = nn.MSELoss() # Specify the loss layer
     # TODO: Modify the line below, experiment with different optimizers and parameters (such as learning rate)
     optimizer = optim.Adam(model.parameters(), lr=5e-3, weight_decay=1e-3) #Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=40, gamma=0.5)
 
     num_epoch = 200 # TODO: Choose an appropriate number of training epochs
-
 
     # train and evaluate network
     train(model, trainloader, num_epoch, optimizer, scheduler)

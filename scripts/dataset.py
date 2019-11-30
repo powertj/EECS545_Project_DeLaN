@@ -10,8 +10,12 @@ class TrajectoryDataset(Dataset):
         self.trajectories = data['trajectories']
         self.torques = data['torques']
         self.g = data['g']
-        self.c = data['c']
         self.H = data['H']
+
+        if 'c' in data:
+            self.c = data['c']
+        else:
+            self.c = np.zeros(self.torques.shape)
 
     def __len__(self):
         return len(self.indices)

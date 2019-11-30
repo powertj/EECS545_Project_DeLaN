@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.io import loadmat
 from tqdm import tqdm # Displays a progress bar
-
 import torch
 from torch import nn
 from torch import optim
@@ -12,45 +12,14 @@ import random
 from dataset import TrajectoryDataset
 # torch.manual_seed(0) # Fix random seed for reproducibility
 
-def generate_train_test_indices(data, num_train_chars=1, num_samples_per_char=1):
-    char_count = {}
-    char_indices = {}
-    train_chars = []
-    test_chars = []
-    train_trajectories = []
-    test_trajectories = []
+def generate_train_test_indices(data, num_train_trajectories=1):
+    indices = np.arange(data['trajectories'].shape[0])
+    train_trajectories = np.random.choice(indices,size=num_train_trajectories,replace=False)
+    test_trajectories = np.delete(indices, train_trajectories,axis=0)
 
-    for i, label in enumerate(data['labels']):
-        idx = label[0]
-        letter = data['keys'][idx-1][0]
-        if letter in char_count:
-            char_count[letter] += 1
-            char_indices[letter].append(i)
+    return list(train_trajectories), list(test_trajectories)
 
-        else:
-            test_chars.append(letter)
-            char_count[letter] = 1
-            char_indices[letter] = [i]
-
-    for i in range(num_train_chars):
-        if len(test_chars) > 0:
-            train_char_idx = random.randint(0,len(test_chars)-1)
-            train_char = test_chars.pop(train_char_idx)
-            train_chars.append(train_char)
-            if num_samples_per_char < len(char_indices[train_char]):
-                train_trajectories += char_indices[train_char][:num_samples_per_char]
-            else:
-                train_trajectories += char_indices[train_char]
-
-    for test_char in test_chars:
-            if num_samples_per_char < len(char_indices[test_char]):
-                test_trajectories += char_indices[test_char][:num_samples_per_char]
-            else:
-                test_trajectories += char_indices[test_char]
-
-    return train_trajectories, test_trajectories
-
-class Reacher_FF_Network(nn.Module):
+class CartPole_FF_Network(nn.Module):
     def __init__(self):
         super().__init__()
         h1_dim = 64
@@ -108,7 +77,7 @@ def evaluate(model, loader): # Evaluate accuracy on validation / test set
                 axs[1].legend()
                 axs[1].set_xlabel('Time Step')
                 axs[1].set_ylabel(r'$\tau_2\,(N-m)$')
-                fig.suptitle('Reacher Feed Forward Network')
+                fig.suptitle('CartPole Feed Forward Network')
                 plt.show()
                 plt.close()
                 i += 1
@@ -120,8 +89,9 @@ def evaluate(model, loader): # Evaluate accuracy on validation / test set
 if __name__ == '__main__':
     # Load the dataset and train and test splits
     print("Loading dataset...")
-    data = np.load('../data/trajectories_joint_space.npz', allow_pickle=True)
-    train_trajectories, test_trajectories = generate_train_test_indices(data, num_train_chars=2, num_samples_per_char=2)
+    fname = '../cartpole_traj_gen/data/cartpole_trajs_goal_1_to_2.mat'
+    data = loadmat(fname)
+    train_trajectories, test_trajectories = generate_train_test_indices(data, num_train_trajectories=4)
     TRAJ_train = TrajectoryDataset(data,train_trajectories)
     TRAJ_test = TrajectoryDataset(data,test_trajectories)
     print("Done!")
@@ -130,7 +100,7 @@ if __name__ == '__main__':
 
     # create model and specify hyperparameters
     device = "cuda" if torch.cuda.is_available() else "cpu" # Configure device
-    model = Reacher_FF_Network().to(device)
+    model = CartPole_FF_Network().to(device)
     criterion = nn.MSELoss() # Specify the loss layer
     # TODO: Modify the line below, experiment with different optimizers and parameters (such as learning rate)
     optimizer = optim.Adam(model.parameters(), lr=5e-3, weight_decay=1e-4) # Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
