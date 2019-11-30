@@ -85,6 +85,7 @@ class Reacher_DeLaN_Network(nn.Module):
         # torch.nn.init.zeros_(self.fc4.bias)
 
         self.act_fn = F.leaky_relu
+        self.neg_slope = -0.01
 
 
     def forward(self,x):
@@ -101,16 +102,16 @@ class Reacher_DeLaN_Network(nn.Module):
         g = self.fc2(h2)
 
         # ld is vector of diagonal L terms, lo is vector of off-diagonal L terms
-        ld = self.act_fn(self.fc3(h2))
+        ld = F.relu(self.fc3(h2))
         lo = self.fc4(h2)
 
-        dRelu_fc1 = torch.where(h1 > 0, torch.ones(h1.shape), -0.01 * torch.ones(h1.shape))
+        dRelu_fc1 = torch.where(h1 > 0, torch.ones(h1.shape), self.neg_slope * torch.ones(h1.shape))
         dh1_dq = torch.diag_embed(dRelu_fc1) @ self.fc1.weight
 
-        dRelu_fc1a = torch.where(h2 > 0, torch.ones(h2.shape), -0.01 * torch.ones(h2.shape))
+        dRelu_fc1a = torch.where(h2 > 0, torch.ones(h2.shape), self.neg_slope * torch.ones(h2.shape))
         dh2_dh1 = torch.diag_embed(dRelu_fc1a) @ self.fc1a.weight
 
-        dRelu_fc3 = torch.where(ld > 0, torch.ones(ld.shape), -0.01 * torch.ones(ld.shape))
+        dRelu_fc3 = torch.where(ld > 0, torch.ones(ld.shape), 0.0 * torch.ones(ld.shape))
 
         dld_dh2 = torch.diag_embed(dRelu_fc3) @ self.fc3.weight
         dlo_dh2 = self.fc4.weight
@@ -150,7 +151,7 @@ class Reacher_DeLaN_Network(nn.Module):
         L = torch.stack(L, dim=2)
         dL_dt = torch.stack(dL_dt, dim=2)
 
-        # dL_dqi n x d x d x d -- last row is index for qi
+        # dL_dqi n x d x d x d -- last dim is index for qi
         dL_dqi = torch.stack(dL_dqi, dim=3).permute(0, 2, 3, 1)
 
         epsilon = .00001    #small number to ensure positive definiteness of H
@@ -160,17 +161,15 @@ class Reacher_DeLaN_Network(nn.Module):
         # Time derivative of Mass Matrix
         dH_dt = L @ dL_dt.permute(0,2,1) + dL_dt @ L.permute(0,2,1)
 
-        #quadratic_term = q_dot.view(n,1,1,d) @ (dL_dqi @ L.permute(0,2,1).view(n,1,d,d) + L.view(n,1,d,d) @ dL_dqi.permute(0,1,3,2)) @ q_dot.view(n,1,d,1)
         quadratic_term = []
         for i in range(d):
             qterm = q_dot.view(n, 1, d) @ (dL_dqi[:, :, :, i] @ L.transpose(1, 2) +
                                            L @ dL_dqi[:, :, :, i].transpose(1, 2)) @ q_dot.view(n, d, 1)
-            #print(qterm.size())
             quadratic_term.append(qterm)
 
         quadratic_term = torch.stack(quadratic_term, dim=1)
 
-        c = dH_dt @ q_dot.view(n,d,1) + quadratic_term.view(n,d,1)
+        c = dH_dt @ q_dot.view(n,d,1) - 0.5 * quadratic_term.view(n,d,1)
 
         tau = H @ q_ddot.view(n,d,1) + c + g.view(n,d,1)
 
@@ -193,7 +192,7 @@ def train(model, loader, num_epoch, optimizer, scheduler): # Train the model
             running_loss.append(loss.item())
             loss.backward() # Backprop gradients to all tensors in the network
             #print(model.fc4.weight.grad)
-            torch.nn.utils.clip_grad_norm(model.parameters(), 100.0)
+            torch.nn.utils.clip_grad_norm(model.parameters(), 10.0)
             optimizer.step() # Update trainable weights
 
         scheduler.step()
@@ -248,8 +247,8 @@ if __name__ == '__main__':
     model = Reacher_DeLaN_Network().to(device)
     criterion = nn.MSELoss() # Specify the loss layer
     # TODO: Modify the line below, experiment with different optimizers and parameters (such as learning rate)
-    optimizer = optim.Adam(model.parameters(), lr=5e-3, weight_decay=1e-2) # Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
+    optimizer = optim.Adam(model.parameters(), lr=5e-3, weight_decay=0.1) #Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=40, gamma=0.5)
 
     num_epoch = 200 # TODO: Choose an appropriate number of training epochs
 
