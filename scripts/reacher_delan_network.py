@@ -149,7 +149,9 @@ class Reacher_DeLaN_Network(nn.Module):
 
         L = torch.stack(L, dim=2)
         dL_dt = torch.stack(dL_dt, dim=2)
-        dL_dqi = torch.stack(dL_dqi, dim=3).transpose(2, 3)
+
+        # dL_dqi n x d x d x d -- last row is index for qi
+        dL_dqi = torch.stack(dL_dqi, dim=3).permute(0, 2, 3, 1)
 
         epsilon = .00001    #small number to ensure positive definiteness of H
 
@@ -158,7 +160,16 @@ class Reacher_DeLaN_Network(nn.Module):
         # Time derivative of Mass Matrix
         dH_dt = L @ dL_dt.permute(0,2,1) + dL_dt @ L.permute(0,2,1)
 
-        quadratic_term = q_dot.view(n,1,1,d) @ (dL_dqi @ L.permute(0,2,1).view(n,1,d,d) + L.view(n,1,d,d) @ dL_dqi.permute(0,1,3,2)) @ q_dot.view(n,1,d,1)
+        #quadratic_term = q_dot.view(n,1,1,d) @ (dL_dqi @ L.permute(0,2,1).view(n,1,d,d) + L.view(n,1,d,d) @ dL_dqi.permute(0,1,3,2)) @ q_dot.view(n,1,d,1)
+        quadratic_term = []
+        for i in range(d):
+            qterm = q_dot.view(n, 1, d) @ (dL_dqi[:, :, :, i] @ L.transpose(1, 2) +
+                                           L @ dL_dqi[:, :, :, i].transpose(1, 2)) @ q_dot.view(n, d, 1)
+            #print(qterm.size())
+            quadratic_term.append(qterm)
+
+        quadratic_term = torch.stack(quadratic_term, dim=1)
+
         c = dH_dt @ q_dot.view(n,d,1) + quadratic_term.view(n,d,1)
 
         tau = H @ q_ddot.view(n,d,1) + c + g.view(n,d,1)
@@ -237,7 +248,7 @@ if __name__ == '__main__':
     model = Reacher_DeLaN_Network().to(device)
     criterion = nn.MSELoss() # Specify the loss layer
     # TODO: Modify the line below, experiment with different optimizers and parameters (such as learning rate)
-    optimizer = optim.Adam(model.parameters(), lr=5e-3, weight_decay=1e-1) # Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
+    optimizer = optim.Adam(model.parameters(), lr=5e-3, weight_decay=1e-2) # Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
 
     num_epoch = 200 # TODO: Choose an appropriate number of training epochs
