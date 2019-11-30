@@ -20,7 +20,7 @@ class DoublePendulumEnv(core.Env):
         'video.frames_per_second' : 30
     }
 
-    dt = .05
+    dt = .025
 
     LINK_LENGTH_1 = 0.5 # [m]
     LINK_LENGTH_2 = 0.5  # [m]

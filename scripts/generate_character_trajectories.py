@@ -24,7 +24,7 @@ def c(q, q_dot, l1=0.5, l2=0.5, m1 = 0.5, m2 = 0.5):
 
 def g(q, l1=0.5, l2=0.5, m1 = 0.5, m2 = 0.5):
     ''' calculates gravitational torque where (l1, l2) are link lengths and (m1, m2) are link masses '''
-    g = 9.8
+    g = 0.0
     return np.array([[(m1 + m2) * l1 * g * np.cos(q[0]) + m2 * g * l2 * np.cos(q[0] + q[1])],
                     [m2 * g * l2 * np.cos(q[0] + q[1])]])
 
@@ -141,7 +141,7 @@ if __name__ =='__main__':
     # joint_data['char_label'] = labels
     # joint_data['char_keys'] = key
 
-    np.savez('../data/trajectories_joint_space.npz', trajectories = joint_trajectories, 
+    np.savez('../data/trajectories_joint_space_no_gravity.npz', trajectories = joint_trajectories,
                                                     labels = labels,
                                                     keys = key,
                                                     torques = tau_list,

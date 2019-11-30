@@ -6,16 +6,16 @@ import matplotlib.pyplot as plt
 import torch
 
 
-data = np.load('../data/trajectories_joint_space.npz',allow_pickle=True)
+data = np.load('../data/trajectories_joint_space_no_gravity.npz',allow_pickle=True)
 test_character = 25
 test_traj = data['trajectories'][test_character]
 ref_torques = data['torques'][test_character]
 Nt = test_traj.shape[0]
 
 # plot figure
-plt.plot(test_traj[:,0], test_traj[:,1])
-plt.title('reference character trajectory')
-plt.show()
+#plt.plot(test_traj[:,0], test_traj[:,1])
+#plt.title('reference character trajectory')
+#plt.show()
 
 env = gym.make('Reacher-v0')
 observation = env.reset()
@@ -38,6 +38,7 @@ plt.show()
 env.unwrapped.set_state(test_traj[0,0:4])
 for t in range(0, Nt):
     action = actions[t,0,0]
+    #action = ref_torques[t,:]
     observation, reward, done, _ = env.step(action)
     env.render()
 

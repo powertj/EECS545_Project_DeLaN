@@ -68,7 +68,7 @@ class Reacher_FF_Network(nn.Module):
         # The loss layer will be applied outside Network class
         return x
 
-def train(model, loader, num_epoch = 10): # Train the model
+def train(model, loader, device, criterion, optimizer, num_epoch = 10): # Train the model
     print("Start training...")
     model.train() # Set the model to training mode
     for i in range(num_epoch):
@@ -85,7 +85,7 @@ def train(model, loader, num_epoch = 10): # Train the model
         print("Epoch {} loss:{}".format(i+1,np.mean(running_loss))) # Print the average loss for this epoch
     print("Done!")
 
-def evaluate(model, loader): # Evaluate accuracy on validation / test set
+def evaluate(model, loader, device, criterion): # Evaluate accuracy on validation / test set
     model.eval() # Set the model to evaluation mode
     MSEs = []
     num_plots= 4
@@ -120,8 +120,8 @@ def evaluate(model, loader): # Evaluate accuracy on validation / test set
 def get_ff_network():
     # Load the dataset and train and test splits
     print("Loading dataset...")
-    data = np.load('../data/trajectories_joint_space.npz', allow_pickle=True)
-    train_trajectories, test_trajectories = generate_train_test_indices(data, num_train_chars=2, num_samples_per_char=2)
+    data = np.load('../data/trajectories_joint_space_no_gravity.npz', allow_pickle=True)
+    train_trajectories, test_trajectories = generate_train_test_indices(data, num_train_chars=8, num_samples_per_char=2)
     TRAJ_train = TrajectoryDataset(data,train_trajectories)
     TRAJ_test = TrajectoryDataset(data,test_trajectories)
     print("Done!")
@@ -137,7 +137,7 @@ def get_ff_network():
     num_epoch = 50 # TODO: Choose an appropriate number of training epochs
 
     # train and evaluate network
-    train(model, trainloader, num_epoch)
+    train(model, trainloader, device, criterion, optimizer, num_epoch)
     return model
 
 if __name__ == '__main__':
@@ -160,5 +160,5 @@ if __name__ == '__main__':
     num_epoch = 200 # TODO: Choose an appropriate number of training epochs
 
     # train and evaluate network
-    train(model, trainloader, num_epoch)
-    evaluate(model, testloader)
+    train(model, trainloader, device, criterion, optimizer, num_epoch)
+    evaluate(model, testloader, device, criterion)
