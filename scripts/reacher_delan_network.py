@@ -102,7 +102,8 @@ class Reacher_DeLaN_Network(nn.Module):
         g = self.fc2(h2)
 
         # ld is vector of diagonal L terms, lo is vector of off-diagonal L terms
-        ld = F.relu(self.fc3(h2))
+        h3 = self.fc3(h2)
+        ld = F.softplus(h3)
         lo = self.fc4(h2)
 
         dRelu_fc1 = torch.where(h1 > 0, torch.ones(h1.shape), self.neg_slope * torch.ones(h1.shape))
@@ -111,8 +112,11 @@ class Reacher_DeLaN_Network(nn.Module):
         dRelu_fc1a = torch.where(h2 > 0, torch.ones(h2.shape), self.neg_slope * torch.ones(h2.shape))
         dh2_dh1 = torch.diag_embed(dRelu_fc1a) @ self.fc1a.weight
 
-        dRelu_fc3 = torch.where(ld > 0, torch.ones(ld.shape), 0.0 * torch.ones(ld.shape))
+        dRelu_fc3 = F.sigmoid(h3)#torch.where(ld > 0, torch.ones(ld.shape), 0.0 * torch.ones(ld.shape))
 
+        #print(h2.size())
+        #print(dRelu_fc3.size())
+        #print(self.fc3.weight.size())
         dld_dh2 = torch.diag_embed(dRelu_fc3) @ self.fc3.weight
         dlo_dh2 = self.fc4.weight
         
@@ -154,7 +158,7 @@ class Reacher_DeLaN_Network(nn.Module):
         # dL_dqi n x d x d x d -- last dim is index for qi
         dL_dqi = torch.stack(dL_dqi, dim=3).permute(0, 2, 3, 1)
 
-        epsilon = .00001    #small number to ensure positive definiteness of H
+        epsilon = 1e-9   #small number to ensure positive definiteness of H
 
         H = L @ L.transpose(1, 2) + epsilon * torch.eye(d)
 
@@ -209,6 +213,7 @@ def evaluate(model, loader): # Evaluate accuracy on validation / test set
             batch = batch.to(device)
             label = label.to(device)
             pred_tau, pred_H, pred_c, pred_g = model(batch)
+
             MSE_error = criterion(pred_tau, label)
             MSEs.append(MSE_error.item())
             # fig, axs = plt.subplots(2, sharex=True)
@@ -247,7 +252,7 @@ if __name__ == '__main__':
     model = Reacher_DeLaN_Network().to(device)
     criterion = nn.MSELoss() # Specify the loss layer
     # TODO: Modify the line below, experiment with different optimizers and parameters (such as learning rate)
-    optimizer = optim.Adam(model.parameters(), lr=5e-3, weight_decay=0.1) #Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
+    optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=5e-1) #Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=40, gamma=0.5)
 
     num_epoch = 200 # TODO: Choose an appropriate number of training epochs
