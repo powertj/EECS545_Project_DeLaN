@@ -252,7 +252,7 @@ if __name__ == '__main__':
     model = Reacher_DeLaN_Network().to(device)
     criterion = nn.MSELoss() # Specify the loss layer
     # TODO: Modify the line below, experiment with different optimizers and parameters (such as learning rate)
-    optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=5e-1) #Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
+    optimizer = optim.Adam(model.parameters(), lr=5e-3, weight_decay=1e-3) #Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=40, gamma=0.5)
 
     num_epoch = 200 # TODO: Choose an appropriate number of training epochs
