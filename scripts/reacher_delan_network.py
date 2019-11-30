@@ -57,7 +57,7 @@ class Reacher_DeLaN_Network(nn.Module):
         # TODO: Design your own network, define layers here.
         input_dim = 2
         h1_dim = 64
-        h2_dim = 32
+        h2_dim = 64
         # joint angle input layer
         self.fc1 = nn.Linear(input_dim, h1_dim)
         #self.fc1b = nn.Linear(h1_dim, h1_dim)
@@ -89,6 +89,7 @@ class Reacher_DeLaN_Network(nn.Module):
 
     def forward(self,x):
         d = x.shape[1] // 3
+        num_off_diagonals = d * (d - 1) // 2
         n = x.shape[0]
         q, q_dot, q_ddot = torch.split(x,[d,d,d], dim = 1)
 
@@ -117,7 +118,7 @@ class Reacher_DeLaN_Network(nn.Module):
         dld_dq = dld_dh2 @ dh2_dh1 @ dh1_dq
         dlo_dq = dlo_dh2 @ dh2_dh1 @ dh1_dq
         dld_dqi = dld_dq.permute(0,2,1).view(n,d,d,1)
-        dlo_dqi = dlo_dq.permute(0,2,1).view(n,d,1,1)
+        dlo_dqi = dlo_dq.permute(0,2,1).view(n,d,-1,1)
 
         # dl_dq = torch.cat([dld_dq,dlo_dq],dim=1)
 
@@ -141,20 +142,18 @@ class Reacher_DeLaN_Network(nn.Module):
                                 dlo_dqi[:, :, lo_start:lo_end].view(n, d, -1)), dim=2)
 
             lo_start = lo_start + lo_end
-            lo_end = lo_end + d - 2
-
+            lo_end = lo_end + d - 2 - i
             L.append(l)
             dL_dt.append(dl_dt)
             dL_dqi.append(dl_dqi)
 
         L = torch.stack(L, dim=2)
         dL_dt = torch.stack(dL_dt, dim=2)
-        dL_dqi = torch.stack(dL_dqi, dim=3)
+        dL_dqi = torch.stack(dL_dqi, dim=3).transpose(2, 3)
 
-        # Mass Matrix
         epsilon = .00001    #small number to ensure positive definiteness of H
 
-        H = L.permute(0, 2, 1) @ L + epsilon * torch.eye(d)
+        H = L @ L.transpose(1, 2) + epsilon * torch.eye(d)
 
         # Time derivative of Mass Matrix
         dH_dt = L @ dL_dt.permute(0,2,1) + dL_dt @ L.permute(0,2,1)
@@ -167,7 +166,8 @@ class Reacher_DeLaN_Network(nn.Module):
         # The loss layer will be applied outside Network class
         return (tau.squeeze(), H.squeeze(), c.squeeze(), g.squeeze())
 
-def train(model, loader, num_epoch = 10): # Train the model
+
+def train(model, loader, num_epoch, optimizer, scheduler): # Train the model
     print("Start training...")
     model.train() # Set the model to training mode
     for i in range(num_epoch):
@@ -182,8 +182,10 @@ def train(model, loader, num_epoch = 10): # Train the model
             running_loss.append(loss.item())
             loss.backward() # Backprop gradients to all tensors in the network
             #print(model.fc4.weight.grad)
-            torch.nn.utils.clip_grad_norm(model.parameters(), 10.0)
+            torch.nn.utils.clip_grad_norm(model.parameters(), 100.0)
             optimizer.step() # Update trainable weights
+
+        scheduler.step()
         print("Epoch {} loss:{}".format(i+1,np.mean(running_loss))) # Print the average loss for this epoch
     
     print("Done!")
@@ -235,10 +237,12 @@ if __name__ == '__main__':
     model = Reacher_DeLaN_Network().to(device)
     criterion = nn.MSELoss() # Specify the loss layer
     # TODO: Modify the line below, experiment with different optimizers and parameters (such as learning rate)
-    optimizer = optim.Adam(model.parameters(), lr=5e-3, weight_decay=1e-2) # Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
+    optimizer = optim.Adam(model.parameters(), lr=5e-3, weight_decay=1e-1) # Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
+
     num_epoch = 200 # TODO: Choose an appropriate number of training epochs
 
 
     # train and evaluate network
-    train(model, trainloader, num_epoch)
+    train(model, trainloader, num_epoch, optimizer, scheduler)
     evaluate(model, testloader)
