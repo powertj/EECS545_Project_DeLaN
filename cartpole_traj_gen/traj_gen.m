@@ -13,6 +13,7 @@ Nsim = length(goal_x);
 sim_length = 20*25;
 trajectories = zeros(Nsim,sim_length,6);
 H = zeros(Nsim,sim_length,2,2);
+c = zeros(Nsim,sim_length,2,2);
 g = zeros(Nsim,sim_length,2);
 torques = zeros(Nsim,sim_length,2);
 for k=1:length(goal_x)
@@ -22,9 +23,10 @@ for k=1:length(goal_x)
         trajectories(k,i,3:6) = cartpole_dynamics(data.x(:,i), data.u(:,i), params).';
         torques(k,i,:) = [data.u(:,i) 0];
         g(k,i,2) = params.m * params.g * params.l * sin(trajectories(k,i,2));
+        c(k,i,1,2) = -params.m * params.l * trajectories(k,i,4) * sin(trajectories(k,i,2));
         H(k,i,:,:) = [params.m + params.M, params.m * params.l * cos(trajectories(k,i,2)); ...
             params.m * params.l * cos(trajectories(k,i,2)), params.m * params.l^2];
     end
 end
 
-save('cartpole_traj_out.mat', 'trajectories', 'torques', 'g', 'H')
+save('cartpole_traj_out.mat', 'trajectories', 'torques', 'g', 'H', 'c')
