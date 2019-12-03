@@ -10,9 +10,9 @@ register(
 )
 register(
     id='ContinuousCartpole-v0',
-    entry_point='gym_cenvs.envs:ContinuousCartpoleEnv',
+    entry_point='gym_cenvs.envs:ContinuousCartPoleEnv',
 )
 register(
     id='ContinuousCartpole-v1',
-    entry_point='gym_cenvs.envs:ContinuousCartpoleSwingupEnv',
+    entry_point='gym_cenvs.envs:ContinuousCartPoleSwingupEnv',
 )

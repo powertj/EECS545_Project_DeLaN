@@ -150,7 +150,7 @@ class CartPole_DeLaN_Network(nn.Module):
         return (tau.squeeze(), (H @ q_ddot.view(n,d,1)).squeeze(), c.squeeze(), g.squeeze())
 
 
-def train(model, loader, num_epoch, optimizer, scheduler): # Train the model
+def train(model, loader, num_epoch, optimizer, scheduler, device, criterion): # Train the model
     print("Start training...")
     model.train() # Set the model to training mode
     for i in range(num_epoch):
@@ -226,6 +226,34 @@ def evaluate(model, loader): # Evaluate accuracy on validation / test set
     Ave_MSE = np.mean(np.array(MSEs))
     print("Average Evaluation MSE: {}".format(Ave_MSE))
     return Ave_MSE
+
+
+def get_model():
+    # Load the dataset and train and test splits
+    print("Loading dataset...")
+    fname = '../cartpole_traj_gen/data/cartpole_trajs_goal_1_to_2.mat'
+    data = loadmat(fname)
+    train_trajectories, test_trajectories = generate_train_test_indices(data, num_train_trajectories=4)
+    TRAJ_train = TrajectoryDataset(data,train_trajectories)
+    TRAJ_test = TrajectoryDataset(data,test_trajectories)
+
+    print("Done!")
+    trainloader = DataLoader(TRAJ_train, batch_size=None)
+    testloader = DataLoader(TRAJ_test, batch_size=None)
+
+    # create model and specify hyperparameters
+    device = "cuda" if torch.cuda.is_available() else "cpu" # Configure device
+    model = CartPole_DeLaN_Network().to(device)
+    criterion = nn.MSELoss() # Specify the loss layer
+    # TODO: Modify the line below, experiment with different optimizers and parameters (such as learning rate)
+    optimizer = optim.Adam(model.parameters(), lr=5e-3, weight_decay=1e-3) #Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=40, gamma=0.5)
+
+    num_epoch = 200 # TODO: Choose an appropriate number of training epochs
+
+    # train and evaluate network
+    train(model, trainloader, num_epoch, optimizer, scheduler, device, criterion)
+    return model
 
 
 if __name__ == '__main__':

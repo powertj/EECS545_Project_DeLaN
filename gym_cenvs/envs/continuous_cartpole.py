@@ -29,23 +29,23 @@ class ContinuousCartPoleEnv(gym.Env):
         'video.frames_per_second': 50
     }
 
-    MAX_POS = 2.5
+    MAX_POS = 10.0
     MAX_ANGLE = np.pi
-    MAX_VEL_1 = 1.0
+    MAX_VEL_1 = 2.0
     MAX_VEL_2 = 4 * np.pi
     swingup = False
 
     def __init__(self):
-        self.gravity = 9.8
-        self.masscart = 1.0
-        self.masspole = 0.1
+        self.gravity = 9.81
+        self.masscart = 10.0
+        self.masspole = 1.0
         self.total_mass = (self.masspole + self.masscart)
         self.length = 0.5  # actually half the pole's length
         self.polemass_length = (self.masspole * self.length)
-        self.force_mag = 30.0
+        self.force_mag = 1.0
         self.tau = 0.05  # seconds between state updates
-        self.min_action = -1.0
-        self.max_action = 1.0
+        self.min_action = -50.0
+        self.max_action = 50.0
         self.angular_damping = 0.00
         self.linear_damping = 0.00
 
@@ -154,6 +154,7 @@ class ContinuousCartPoleEnv(gym.Env):
             or theta < -self.theta_threshold_radians \
             or theta > self.theta_threshold_radians
         done = bool(done)
+        done = False
         if not done:
             reward = 1.0
         elif self.steps_beyond_done is None:
