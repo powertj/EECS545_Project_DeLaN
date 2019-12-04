@@ -42,7 +42,7 @@ lb = struct();
 lb.x = [-Inf*ones(1,Nt+1);pi/2*ones(1,Nt+1);-20*ones(2,Nt+1)];
 lb.u = -c*ones(Nu,Nt);
 ub = struct();
-ub.x = [Inf*ones(1,Nt+1);4*pi*ones(1,Nt+1);20*ones(2,Nt+1)];
+ub.x = [Inf*ones(1,Nt+1);3*pi/2*ones(1,Nt+1);20*ones(2,Nt+1)];
 ub.u = c*ones(Nu,Nt);
 
 % build solvers
