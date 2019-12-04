@@ -13,7 +13,7 @@ np.random.seed(0)
 print("Loading dataset...")
 data = np.load('../data/trajectories_joint_space.npz', allow_pickle=True)
 print("Done!")
-num_epoch = 200
+num_epoch = 150
 num_samples_per_char = 1
 seeds = np.arange(10)
 train_chars_range = np.concatenate((np.array([1]),np.arange(2,19,step=2)))
@@ -71,14 +71,18 @@ plt.plot(train_chars_range, np.mean(rdn_loss, axis=1), c='red',label='Reacher De
 plt.plot(train_chars_range, np.mean(rffn_loss, axis=1), c='blue',label='Reacher FF-NN')
 plt.fill_between(train_chars_range,rdn_lower_95conf,rdn_upper_95conf,where=rdn_upper_95conf >= rdn_lower_95conf, facecolor='red', interpolate=True, alpha=0.5)
 plt.fill_between(train_chars_range,rffn_lower_95conf,rffn_upper_95conf,where=rffn_upper_95conf >= rffn_lower_95conf, facecolor='blue', interpolate=True, alpha=0.5)
-plt.yscale('log')
+# plt.yscale('log')
 plt.xticks(train_chars_range)
 plt.ylabel('MSE')
 plt.xlabel('Unique Training Characters')
 plt.legend()
-plt.title('DeLaN vs Reacher Test Error')
+plt.title('Reacher DeLaN vs FF-NN Test Error')
 plt.savefig('delan_vs_ff_test_error.png')
-plt.show()
+# plt.show()
 plt.close()
+
+np.savetxt('rdn_loss.txt',rdn_loss)
+np.savetxt('rffn_loss.txt',rffn_loss)
+
 
 
