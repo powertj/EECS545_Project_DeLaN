@@ -10,14 +10,14 @@ params.g = 9.81; % gravity
 
 goal_x = 1:0.1:2;
 Nsim = length(goal_x);
-sim_length = 20*25;
+sim_length = 20*5;
 trajectories = zeros(Nsim,sim_length,6);
 H = zeros(Nsim,sim_length,2,2);
 c = zeros(Nsim,sim_length,2,2);
 g = zeros(Nsim,sim_length,2);
 torques = zeros(Nsim,sim_length,2);
 for k=1:length(goal_x)
-    data = run_mpc_sim([goal_x(k); pi; 0; 0], sim_length, mpc);
+    data = run_mpc_sim([goal_x(k); pi; 0; 0], sim_length, 200, mpc);
     trajectories(k,:,1:2) = data.x(1:2,1:end-1).';
     for i=1:sim_length
         trajectories(k,i,3:6) = cartpole_dynamics(data.x(:,i), data.u(:,i), params).';
@@ -82,4 +82,43 @@ for k=1:Nsim
 end
 
 save('cartpole_traj_out.mat', 'trajectories', 'torques', 'g', 'H', 'c')
+
+
+%% combine into one file - WIP (need to zero pad)
+
+clear
+
+load('cartpole_trajs_goal_1_to_2.mat')
+
+translate_tjs = trajectories;
+translate_tqs = torques;
+translate_g = g;
+translate_H = H;
+translate_c = c;
+
+load('cartpole_trajs_swingup.mat')
+
+swingup_tjs = trajectories;
+swingup_tqs = torques;
+swingup_g = g;
+swingup_H = H;
+swingup_c = c;
+
+load('cartpole_trajs_revolution.mat')
+
+rev_tjs = trajectories;
+rev_tqs = torques;
+rev_g = g;
+rev_H = H;
+rev_c = c;
+
+labels = [ones(1,size(translate_tjs,1)) 2*ones(1,size(swingup_tjs,1)) 3*ones(1,size(rev_tjs,1))];
+
+trajectories = cat(1,translate_tjs,swingup_tjs,rev_tjs);
+torques = cat(1,translate_tqs,swingup_tqs,rev_tqs);
+g = cat(1,translate_g,swingup_g,rev_g);
+H = cat(1,translate_H,swingup_H,rev_H);
+c = cat(1,translate_c,swingup_c,rev_c);
+
+save('cartpole_all.mat', 'trajectories', 'torques', 'g', 'H', 'c', 'labels')
 
