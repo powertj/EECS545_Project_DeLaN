@@ -112,7 +112,7 @@ class Reacher_DeLaN_Network(nn.Module):
         dRelu_fc1a = torch.where(h2 > 0, torch.ones(h2.shape), self.neg_slope * torch.ones(h2.shape))
         dh2_dh1 = torch.diag_embed(dRelu_fc1a) @ self.fc1a.weight
 
-        dRelu_fc3 = F.sigmoid(h3)#torch.where(ld > 0, torch.ones(ld.shape), 0.0 * torch.ones(ld.shape))
+        dRelu_fc3 = torch.sigmoid(h3)#torch.where(ld > 0, torch.ones(ld.shape), 0.0 * torch.ones(ld.shape))
 
         #print(h2.size())
         #print(dRelu_fc3.size())
@@ -181,7 +181,7 @@ class Reacher_DeLaN_Network(nn.Module):
         return (tau.squeeze(), (H @ q_ddot.view(n,d,1)).squeeze(), c.squeeze(), g.squeeze())
 
 
-def train(model, loader, num_epoch, optimizer, scheduler): # Train the model
+def train(model, criterion, loader, device, optimizer, scheduler, num_epoch=10): # Train the model
     print("Start training...")
     model.train() # Set the model to training mode
     for i in range(num_epoch):
@@ -195,7 +195,6 @@ def train(model, loader, num_epoch, optimizer, scheduler): # Train the model
             loss = criterion(pred_tau, label) # Calculate the loss
             running_loss.append(loss.item())
             loss.backward() # Backprop gradients to all tensors in the network
-            #print(model.fc4.weight.grad)
             torch.nn.utils.clip_grad_norm(model.parameters(), 10.0)
             optimizer.step() # Update trainable weights
 
@@ -205,10 +204,9 @@ def train(model, loader, num_epoch, optimizer, scheduler): # Train the model
     print("Done!")
 
 
-def evaluate(model, loader): # Evaluate accuracy on validation / test set
+def evaluate(model, criterion, loader, device, show_plots=False, num_plots=1): # Evaluate accuracy on validation / test set
     model.eval() # Set the model to evaluation mode
     MSEs = []
-    num_plots= 2
     i = 0
     with torch.no_grad(): # Do not calculate grident to speed up computation
         for batch, label, g, c, h in tqdm(loader):
@@ -219,40 +217,40 @@ def evaluate(model, loader): # Evaluate accuracy on validation / test set
             MSE_error = criterion(pred_tau, label)
             MSEs.append(MSE_error.item())
             Hq_ddot = (h @ batch[:,-2:].unsqueeze(2)).squeeze()
-
-            if i < num_plots:
-                fig, axs = plt.subplots(2,4, sharex=True)
-                axs[0,0].plot(label[:,0],label='Calculated',color='b')
-                axs[0,0].plot(pred_tau[:,0],label='Predicted',color='r')
-                axs[0,0].legend()
-                axs[0,0].set_title(r'$\mathbf{\tau}$')
-                axs[0,0].set_ylabel(r'$Torque_{1}\,(N-m)$')
-                axs[1,0].plot(label[:,1],label='Calculated',color='b')
-                axs[1,0].plot(pred_tau[:,1],label='Predicted',color='r')
-                axs[1,0].set_xlabel('Time Step')
-                axs[1,0].set_ylabel(r'$Torque_{2}\,(N-m)$')
-                axs[0,1].set_title(r'$\mathbf{H(q)\ddot{q})}$')
-                axs[0,1].plot(Hq_ddot[:,0],label='Calculated',color='b')
-                axs[0,1].plot(pred_Hq_ddot[:,0],label='Predicted',color='r')
-                axs[1,1].plot(Hq_ddot[:,1],label='Calculated',color='b')
-                axs[1,1].plot(pred_Hq_ddot[:,1],label='Predicted',color='r')
-                axs[1,1].set_xlabel('Time Step')
-                axs[0,2].set_title(r'$\mathbf{c(q,\dot{q})}$')
-                axs[0,2].plot(c[:,0],label='Calculated',color='b')
-                axs[0,2].plot(pred_c[:,0],label='Predicted',color='r')
-                axs[1,2].plot(c[:,1],label='Calculated',color='b')
-                axs[1,2].plot(pred_c[:,1],label='Predicted',color='r')
-                axs[1,2].set_xlabel('Time Step')
-                axs[0,3].set_title(r'$\mathbf{g(q)}$')
-                axs[0,3].plot(g[:,0],label='Calculated',color='b')
-                axs[0,3].plot(pred_g[:,0],label='Predicted',color='r')
-                axs[1,3].plot(g[:,1],label='Calculated',color='b')
-                axs[1,3].plot(pred_g[:,1],label='Predicted',color='r')
-                axs[1,3].set_xlabel('Time Step')
-                fig.suptitle('Reacher DeLaN Network')
-                plt.show()
-                plt.close()
-                i += 1
+            if show_plots:
+                if i < num_plots:
+                    fig, axs = plt.subplots(2,4, sharex=True)
+                    axs[0,0].plot(label[:,0],label='Calculated',color='b')
+                    axs[0,0].plot(pred_tau[:,0],label='Predicted',color='r')
+                    axs[0,0].legend()
+                    axs[0,0].set_title(r'$\mathbf{\tau}$')
+                    axs[0,0].set_ylabel(r'$Torque_{1}\,(N-m)$')
+                    axs[1,0].plot(label[:,1],label='Calculated',color='b')
+                    axs[1,0].plot(pred_tau[:,1],label='Predicted',color='r')
+                    axs[1,0].set_xlabel('Time Step')
+                    axs[1,0].set_ylabel(r'$Torque_{2}\,(N-m)$')
+                    axs[0,1].set_title(r'$\mathbf{H(q)\ddot{q})}$')
+                    axs[0,1].plot(Hq_ddot[:,0],label='Calculated',color='b')
+                    axs[0,1].plot(pred_Hq_ddot[:,0],label='Predicted',color='r')
+                    axs[1,1].plot(Hq_ddot[:,1],label='Calculated',color='b')
+                    axs[1,1].plot(pred_Hq_ddot[:,1],label='Predicted',color='r')
+                    axs[1,1].set_xlabel('Time Step')
+                    axs[0,2].set_title(r'$\mathbf{c(q,\dot{q})}$')
+                    axs[0,2].plot(c[:,0],label='Calculated',color='b')
+                    axs[0,2].plot(pred_c[:,0],label='Predicted',color='r')
+                    axs[1,2].plot(c[:,1],label='Calculated',color='b')
+                    axs[1,2].plot(pred_c[:,1],label='Predicted',color='r')
+                    axs[1,2].set_xlabel('Time Step')
+                    axs[0,3].set_title(r'$\mathbf{g(q)}$')
+                    axs[0,3].plot(g[:,0],label='Calculated',color='b')
+                    axs[0,3].plot(pred_g[:,0],label='Predicted',color='r')
+                    axs[1,3].plot(g[:,1],label='Calculated',color='b')
+                    axs[1,3].plot(pred_g[:,1],label='Predicted',color='r')
+                    axs[1,3].set_xlabel('Time Step')
+                    fig.suptitle('Reacher DeLaN Network')
+                    plt.show()
+                    plt.close()
+                    i += 1
 
     Ave_MSE = np.mean(np.array(MSEs))
     print("Average Evaluation MSE: {}".format(Ave_MSE))
@@ -284,5 +282,5 @@ if __name__ == '__main__':
 
 
     # train and evaluate network
-    train(model, trainloader, num_epoch, optimizer, scheduler)
-    evaluate(model, testloader)
+    train(model, criterion, trainloader, device, optimizer, scheduler, num_epoch)
+    evaluate(model, criterion, testloader, device)

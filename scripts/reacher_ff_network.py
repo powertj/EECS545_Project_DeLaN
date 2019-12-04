@@ -68,7 +68,7 @@ class Reacher_FF_Network(nn.Module):
         # The loss layer will be applied outside Network class
         return x
 
-def train(model, loader, num_epoch = 10): # Train the model
+def train(model, criterion, loader, device, optimizer, scheduler, num_epoch = 10): # Train the model
     print("Start training...")
     model.train() # Set the model to training mode
     for i in range(num_epoch):
@@ -81,14 +81,16 @@ def train(model, loader, num_epoch = 10): # Train the model
             loss = criterion(pred, label) # Calculate the loss
             running_loss.append(loss.item())
             loss.backward() # Backprop gradients to all tensors in the network
+            torch.nn.utils.clip_grad_norm(model.parameters(), 10.0)
             optimizer.step() # Update trainable weights
+        
+        scheduler.step()
         print("Epoch {} loss:{}".format(i+1,np.mean(running_loss))) # Print the average loss for this epoch
     print("Done!")
 
-def evaluate(model, loader): # Evaluate accuracy on validation / test set
+def evaluate(model, criterion, loader, device, show_plots=False, num_plots=1): # Evaluate accuracy on validation / test set
     model.eval() # Set the model to evaluation mode
     MSEs = []
-    num_plots= 4
     i = 0
     with torch.no_grad(): # Do not calculate grident to speed up computation
         for batch, label, _, _, _ in tqdm(loader):
@@ -97,21 +99,22 @@ def evaluate(model, loader): # Evaluate accuracy on validation / test set
             pred = model(batch)
             MSE_error = criterion(pred, label)
             MSEs.append(MSE_error.item())
-            if i < num_plots:
-                fig, axs = plt.subplots(2, sharex=True)
-                axs[0].plot(label[:,0],label='Calculated',color='b')
-                axs[0].plot(pred[:,0],label='Predicted',color='r')
-                axs[0].legend()
-                axs[0].set_ylabel(r'$\tau_1\,(N-m)$')
-                axs[1].plot(label[:,1],label='Calculated',color='b')
-                axs[1].plot(pred[:,1],label='Predicted',color='r')
-                axs[1].legend()
-                axs[1].set_xlabel('Time Step')
-                axs[1].set_ylabel(r'$\tau_2\,(N-m)$')
-                fig.suptitle('Reacher Feed Forward Network')
-                plt.show()
-                plt.close()
-                i += 1
+            if show_plots:
+                if i < num_plots:
+                    fig, axs = plt.subplots(2, sharex=True)
+                    axs[0].plot(label[:,0],label='Calculated',color='b')
+                    axs[0].plot(pred[:,0],label='Predicted',color='r')
+                    axs[0].legend()
+                    axs[0].set_ylabel(r'$\tau_1\,(N-m)$')
+                    axs[1].plot(label[:,1],label='Calculated',color='b')
+                    axs[1].plot(pred[:,1],label='Predicted',color='r')
+                    axs[1].legend()
+                    axs[1].set_xlabel('Time Step')
+                    axs[1].set_ylabel(r'$\tau_2\,(N-m)$')
+                    fig.suptitle('Reacher Feed Forward Network')
+                    plt.show()
+                    plt.close()
+                    i += 1
 
     Ave_MSE = np.mean(np.array(MSEs))
     print("Average Evaluation MSE: {}".format(Ave_MSE))
@@ -137,5 +140,5 @@ if __name__ == '__main__':
     num_epoch = 200 # TODO: Choose an appropriate number of training epochs
 
     # train and evaluate network
-    train(model, trainloader, num_epoch)
-    evaluate(model, testloader)
+    train(model, criterion, trainloader, device, optimizer, num_epoch)
+    evaluate(model, criterion, testloader, device)
