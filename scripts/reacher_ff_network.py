@@ -68,7 +68,7 @@ class Reacher_FF_Network(nn.Module):
         # The loss layer will be applied outside Network class
         return x
 
-def train(model, criterion, loader, device, optimizer, num_epoch = 10): # Train the model
+def train(model, criterion, loader, device, optimizer, scheduler, num_epoch = 10): # Train the model
     print("Start training...")
     model.train() # Set the model to training mode
     for i in range(num_epoch):
@@ -81,7 +81,10 @@ def train(model, criterion, loader, device, optimizer, num_epoch = 10): # Train 
             loss = criterion(pred, label) # Calculate the loss
             running_loss.append(loss.item())
             loss.backward() # Backprop gradients to all tensors in the network
+            torch.nn.utils.clip_grad_norm(model.parameters(), 10.0)
             optimizer.step() # Update trainable weights
+        
+        scheduler.step()
         print("Epoch {} loss:{}".format(i+1,np.mean(running_loss))) # Print the average loss for this epoch
     print("Done!")
 

@@ -195,7 +195,6 @@ def train(model, criterion, loader, device, optimizer, scheduler, num_epoch=10):
             loss = criterion(pred_tau, label) # Calculate the loss
             running_loss.append(loss.item())
             loss.backward() # Backprop gradients to all tensors in the network
-            #print(model.fc4.weight.grad)
             torch.nn.utils.clip_grad_norm(model.parameters(), 10.0)
             optimizer.step() # Update trainable weights
 

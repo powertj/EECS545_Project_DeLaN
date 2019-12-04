@@ -13,14 +13,16 @@ np.random.seed(0)
 print("Loading dataset...")
 data = np.load('../data/trajectories_joint_space.npz', allow_pickle=True)
 print("Done!")
-num_epoch = 100
+num_epoch = 200
 num_samples_per_char = 1
-seeds = np.arange(5)
-train_chars_range = np.arange(1,4)
+seeds = np.arange(10)
+train_chars_range = np.concatenate((np.array([1]),np.arange(2,19,step=2)))
 rdn_loss = np.zeros((len(train_chars_range),len(seeds)))
 rffn_loss = np.zeros(rdn_loss.shape)
 
-device = "cuda" if torch.cuda.is_available() else "cpu" # Configure device
+# device = "cuda" if torch.cuda.is_available() else "cpu" # Configure device
+device = "cpu" # Configure device
+
 criterion = nn.MSELoss() # Specify the loss layer
 
 i = 0
@@ -40,14 +42,15 @@ for num_train_chars in tqdm(train_chars_range):
 
         # create model for reacher ff network and specify hyperparameters
         rffn_model = rffn.Reacher_FF_Network().to(device)
-        rffn_optimizer = optim.Adam(rffn_model.parameters(), lr=5e-3, weight_decay=1e-3)
+        rffn_optimizer = optim.Adam(rffn_model.parameters(), lr=5e-2, weight_decay=1e-3)
+        rffn_scheduler = optim.lr_scheduler.StepLR(rffn_optimizer, step_size=40, gamma=0.5)
 
         # train and evaluate reacher delan network
         rdn.train(rdn_model, criterion, trainloader, device, rdn_optimizer, rdn_scheduler, num_epoch)
         rdn_loss[i,seed] = rdn.evaluate(rdn_model, criterion, testloader, device)
 
         # train and evaluate reacher ff network
-        rffn.train(rffn_model, criterion, trainloader, device, rffn_optimizer, num_epoch)
+        rffn.train(rffn_model, criterion, trainloader, device, rffn_optimizer, rffn_scheduler, num_epoch)
         rffn_loss[i,seed] = rffn.evaluate(rffn_model, criterion, testloader, device)
     i += 1
 
@@ -68,6 +71,7 @@ plt.plot(train_chars_range, np.mean(rdn_loss, axis=1), c='red',label='Reacher De
 plt.plot(train_chars_range, np.mean(rffn_loss, axis=1), c='blue',label='Reacher FF-NN')
 plt.fill_between(train_chars_range,rdn_lower_95conf,rdn_upper_95conf,where=rdn_upper_95conf >= rdn_lower_95conf, facecolor='red', interpolate=True, alpha=0.5)
 plt.fill_between(train_chars_range,rffn_lower_95conf,rffn_upper_95conf,where=rffn_upper_95conf >= rffn_lower_95conf, facecolor='blue', interpolate=True, alpha=0.5)
+plt.yscale('log')
 plt.xticks(train_chars_range)
 plt.ylabel('MSE')
 plt.xlabel('Unique Training Characters')
