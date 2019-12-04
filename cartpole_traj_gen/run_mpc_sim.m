@@ -8,7 +8,7 @@ params.l = 1; % pendulum length
 params.g = 9.81; % gravity
 
 % initial state
-z0 = [0 2*pi 0 0].';
+z0 = [0 3*pi 0 0].';
 
 % final state
 zg = goal;
@@ -42,7 +42,7 @@ lb = struct();
 lb.x = [-Inf*ones(1,Nt+1);pi/2*ones(1,Nt+1);-20*ones(2,Nt+1)];
 lb.u = -c*ones(Nu,Nt);
 ub = struct();
-ub.x = [Inf*ones(1,Nt+1);3*pi*ones(1,Nt+1);20*ones(2,Nt+1)];
+ub.x = [Inf*ones(1,Nt+1);4*pi*ones(1,Nt+1);20*ones(2,Nt+1)];
 ub.u = c*ones(Nu,Nt);
 
 % build solvers
