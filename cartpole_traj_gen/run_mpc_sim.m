@@ -8,7 +8,7 @@ params.l = 1; % pendulum length
 params.g = 9.81; % gravity
 
 % initial state
-z0 = [0 3*pi 0 0].';
+z0 = [0 pi 0 0].';
 
 % final state
 zg = goal;
