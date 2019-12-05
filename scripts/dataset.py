@@ -1,7 +1,5 @@
 import numpy as np
-import os
 import torch
-from tqdm import tqdm
 from torch.utils.data.dataset import Dataset
 
 class TrajectoryDataset(Dataset):
@@ -11,11 +9,7 @@ class TrajectoryDataset(Dataset):
         self.torques = data['torques']
         self.g = data['g']
         self.H = data['H']
-
-        if 'c' in data:
-            self.c = data['c']
-        else:
-            self.c = np.zeros(self.torques.shape)
+        self.c = data['c']
 
     def __len__(self):
         return len(self.indices)

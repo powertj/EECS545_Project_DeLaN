@@ -114,9 +114,6 @@ class Reacher_DeLaN_Network(nn.Module):
 
         dRelu_fc3 = torch.sigmoid(h3)#torch.where(ld > 0, torch.ones(ld.shape), 0.0 * torch.ones(ld.shape))
 
-        #print(h2.size())
-        #print(dRelu_fc3.size())
-        #print(self.fc3.weight.size())
         dld_dh2 = torch.diag_embed(dRelu_fc3) @ self.fc3.weight
         dlo_dh2 = self.fc4.weight
         
@@ -124,8 +121,6 @@ class Reacher_DeLaN_Network(nn.Module):
         dlo_dq = dlo_dh2 @ dh2_dh1 @ dh1_dq
         dld_dqi = dld_dq.permute(0,2,1).view(n,d,d,1)
         dlo_dqi = dlo_dq.permute(0,2,1).view(n,d,-1,1)
-
-        # dl_dq = torch.cat([dld_dq,dlo_dq],dim=1)
 
         dld_dt = dld_dq @ q_dot.view(n,d,1)
         dlo_dt = dlo_dq @ q_dot.view(n,d,1)
@@ -219,7 +214,7 @@ def evaluate(model, criterion, loader, device, show_plots=False, num_plots=1): #
             Hq_ddot = (h @ batch[:,-2:].unsqueeze(2)).squeeze()
             if show_plots:
                 if i < num_plots:
-                    fig, axs = plt.subplots(2,4, sharex=True)
+                    fig, axs = plt.subplots(2,4, figsize=(14.0, 8.0), sharex=True)
                     axs[0,0].plot(label[:,0],label='Calculated',color='b')
                     axs[0,0].plot(pred_tau[:,0],label='Predicted',color='r')
                     axs[0,0].legend()
@@ -229,7 +224,7 @@ def evaluate(model, criterion, loader, device, show_plots=False, num_plots=1): #
                     axs[1,0].plot(pred_tau[:,1],label='Predicted',color='r')
                     axs[1,0].set_xlabel('Time Step')
                     axs[1,0].set_ylabel(r'$Torque_{2}\,(N-m)$')
-                    axs[0,1].set_title(r'$\mathbf{H(q)\ddot{q})}$')
+                    axs[0,1].set_title(r'$\mathbf{H(q)\ddot{q}}$')
                     axs[0,1].plot(Hq_ddot[:,0],label='Calculated',color='b')
                     axs[0,1].plot(pred_Hq_ddot[:,0],label='Predicted',color='r')
                     axs[1,1].plot(Hq_ddot[:,1],label='Calculated',color='b')
@@ -262,7 +257,7 @@ if __name__ == '__main__':
     # Load the dataset and train and test splits
     print("Loading dataset...")
     data = np.load('../data/trajectories_joint_space.npz', allow_pickle=True)
-    train_trajectories, test_trajectories = generate_train_test_indices(data, num_train_chars=10, num_samples_per_char=2)
+    train_trajectories, test_trajectories = generate_train_test_indices(data, num_train_chars=8, num_samples_per_char=2)
     TRAJ_train = TrajectoryDataset(data,train_trajectories)
     TRAJ_test = TrajectoryDataset(data,test_trajectories)
 
@@ -283,4 +278,4 @@ if __name__ == '__main__':
 
     # train and evaluate network
     train(model, criterion, trainloader, device, optimizer, scheduler, num_epoch)
-    evaluate(model, criterion, testloader, device)
+    evaluate(model, criterion, testloader, device, show_plots=True)

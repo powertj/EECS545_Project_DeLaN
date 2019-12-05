@@ -12,13 +12,111 @@ import random
 from dataset import TrajectoryDataset
 # torch.manual_seed(0) # Fix random seed for reproducibility
 
-def generate_train_test_indices(data, num_train_trajectories=1):
-    indices = np.arange(data['trajectories'].shape[0])
-    train_trajectories = np.random.choice(indices,size=num_train_trajectories,replace=False)
-    test_trajectories = np.delete(indices, train_trajectories,axis=0)
+# def generate_train_test_indices(data, num_train_trajectories=1):
+#     indices = np.arange(data['trajectories'].shape[0])
+#     train_trajectories = np.random.choice(indices,size=num_train_trajectories,replace=False)
+#     test_trajectories = np.delete(indices, train_trajectories,axis=0)
 
-    return list(train_trajectories), list(test_trajectories)
+#     return list(train_trajectories), list(test_trajectories)
 
+def generate_train_test_indices(data, num_train_labels=1, num_samples_per_label=1):
+    label_count = {}
+    label_indices = {}
+    train_labels = []
+    test_labels = []
+    train_trajectories = []
+    test_trajectories = []
+
+    for i, label in enumerate(data['labels'].flatten()):
+        if label in label_count:
+            label_count[label] += 1
+            label_indices[label].append(i)
+
+        else:
+            test_labels.append(label)
+            label_count[label] = 1
+            label_indices[label] = [i]
+
+    for i in range(num_train_labels):
+        if len(test_labels) > 0:
+            train_label_idx = random.randint(0,len(test_labels)-1)
+            train_label = test_labels.pop(train_label_idx)
+            train_labels.append(train_label)
+            if num_samples_per_label < len(label_indices[train_label]):
+                train_trajectories += label_indices[train_label][:num_samples_per_label]
+            else:
+                train_trajectories += label_indices[train_label]
+
+    for test_label in test_labels:
+            if num_samples_per_label < len(label_indices[test_label]):
+                test_trajectories += label_indices[test_label][:num_samples_per_label]
+            else:
+                test_trajectories += label_indices[test_label]
+
+    return train_trajectories, test_trajectories, train_labels
+
+def select_train_test_indices(data, train_labels=[1], num_samples_per_label=1):
+    label_count = {}
+    label_indices = {}
+    test_labels = []
+    train_trajectories = []
+    test_trajectories = []
+
+    for i, label in enumerate(data['labels'].flatten()):
+        if label in label_count:
+            label_count[label] += 1
+            label_indices[label].append(i)
+
+        else:
+            test_labels.append(label)
+            label_count[label] = 1
+            label_indices[label] = [i]
+
+    for train_label in train_labels:
+            if train_label in test_labels:
+                test_labels.remove(train_label)
+            if num_samples_per_label < len(label_indices[train_label]):
+                train_trajectories += label_indices[train_label][:num_samples_per_label]
+            else:
+                train_trajectories += label_indices[train_label]
+
+    for test_label in test_labels:
+            if num_samples_per_label < len(label_indices[test_label]):
+                test_trajectories += label_indices[test_label][:num_samples_per_label]
+            else:
+                test_trajectories += label_indices[test_label]
+
+    return train_trajectories, test_trajectories
+
+def generate_one_shot_train_test_indices(data, train_labels, test_label, num_samples_per_label=1):
+    label_count = {}
+    label_indices = {}
+    train_trajectories = []
+    test_trajectories = []
+
+    for i, label in enumerate(data['labels'].flatten()):
+        if label in label_count:
+            label_count[label] += 1
+            label_indices[label].append(i)
+
+        else:
+            label_count[label] = 1
+            label_indices[label] = [i]
+
+    for train_label in train_labels:
+            if num_samples_per_label < len(label_indices[train_label]):
+                train_trajectories += label_indices[train_label][:num_samples_per_label]
+            else:
+                train_trajectories += label_indices[train_label][1:]
+    
+    train_trajectories += [label_indices[test_label][0]]
+
+    if num_samples_per_label < len(label_indices[test_label]):
+        test_trajectories += label_indices[test_label][1:num_samples_per_label+1]
+    else:
+        test_trajectories += label_indices[test_label][1:]
+
+    return train_trajectories, test_trajectories
 
 class CartPole_DeLaN_Network(nn.Module):
     def __init__(self):
@@ -81,11 +179,8 @@ class CartPole_DeLaN_Network(nn.Module):
         dRelu_fc1a = torch.where(h2 > 0, torch.ones(h2.shape), self.neg_slope * torch.ones(h2.shape))
         dh2_dh1 = torch.diag_embed(dRelu_fc1a) @ self.fc1a.weight
 
-        dRelu_fc3 = F.sigmoid(h3)#torch.where(ld > 0, torch.ones(ld.shape), 0.0 * torch.ones(ld.shape))
+        dRelu_fc3 = torch.sigmoid(h3)#torch.where(ld > 0, torch.ones(ld.shape), 0.0 * torch.ones(ld.shape))
 
-        #print(h2.size())
-        #print(dRelu_fc3.size())
-        #print(self.fc3.weight.size())
         dld_dh2 = torch.diag_embed(dRelu_fc3) @ self.fc3.weight
         dlo_dh2 = self.fc4.weight
         
@@ -93,8 +188,6 @@ class CartPole_DeLaN_Network(nn.Module):
         dlo_dq = dlo_dh2 @ dh2_dh1 @ dh1_dq
         dld_dqi = dld_dq.permute(0,2,1).view(n,d,d,1)
         dlo_dqi = dlo_dq.permute(0,2,1).view(n,d,-1,1)
-
-        # dl_dq = torch.cat([dld_dq,dlo_dq],dim=1)
 
         dld_dt = dld_dq @ q_dot.view(n,d,1)
         dlo_dt = dlo_dq @ q_dot.view(n,d,1)
@@ -146,11 +239,13 @@ class CartPole_DeLaN_Network(nn.Module):
 
         tau = H @ q_ddot.view(n,d,1) + c + g.view(n,d,1)
 
+        #set uncontrolled torque to zero
+        # tau = torch.diag_embed(torch.cat((torch.ones(n,1), torch.zeros(n,1)),dim=1)) @ tau
         # The loss layer will be applied outside Network class
         return (tau.squeeze(), (H @ q_ddot.view(n,d,1)).squeeze(), c.squeeze(), g.squeeze())
 
 
-def train(model, loader, num_epoch, optimizer, scheduler): # Train the model
+def train(model, criterion, loader, device, optimizer, scheduler, num_epoch=10): # Train the model
     print("Start training...")
     model.train() # Set the model to training mode
     for i in range(num_epoch):
@@ -164,7 +259,6 @@ def train(model, loader, num_epoch, optimizer, scheduler): # Train the model
             loss = criterion(pred_tau, label) # Calculate the loss
             running_loss.append(loss.item())
             loss.backward() # Backprop gradients to all tensors in the network
-            #print(model.fc4.weight.grad)
             torch.nn.utils.clip_grad_norm(model.parameters(), 10.0)
             optimizer.step() # Update trainable weights
 
@@ -174,10 +268,10 @@ def train(model, loader, num_epoch, optimizer, scheduler): # Train the model
     print("Done!")
 
 
-def evaluate(model, loader): # Evaluate accuracy on validation / test set
+def evaluate(model, criterion, loader, device, show_plots=False, num_plots=1): # Evaluate accuracy on validation / test set
     model.eval() # Set the model to evaluation mode
     MSEs = []
-    num_plots= 4
+    num_plots= 1
     i = 0
     with torch.no_grad(): # Do not calculate grident to speed up computation
         for batch, label, g, c, h in tqdm(loader):
@@ -188,40 +282,41 @@ def evaluate(model, loader): # Evaluate accuracy on validation / test set
             MSE_error = criterion(pred_tau, label)
             MSEs.append(MSE_error.item())
             Hq_ddot = (h @ batch[:,-2:].unsqueeze(2)).squeeze()
-
-            if i < num_plots:
-                fig, axs = plt.subplots(2,4, sharex=True)
-                axs[0,0].plot(label[:,0],label='Calculated',color='b')
-                axs[0,0].plot(pred_tau[:,0],label='Predicted',color='r')
-                axs[0,0].legend()
-                axs[0,0].set_title(r'$\mathbf{\tau}$')
-                axs[0,0].set_ylabel(r'$Torque_{1}\,(N-m)$')
-                axs[1,0].plot(label[:,1],label='Calculated',color='b')
-                axs[1,0].plot(pred_tau[:,1],label='Predicted',color='r')
-                axs[1,0].set_xlabel('Time Step')
-                axs[1,0].set_ylabel(r'$Torque_{2}\,(N-m)$')
-                axs[0,1].set_title(r'$\mathbf{H(q)\ddot{q})}$')
-                axs[0,1].plot(Hq_ddot[:,0],label='Calculated',color='b')
-                axs[0,1].plot(pred_Hq_ddot[:,0],label='Predicted',color='r')
-                axs[1,1].plot(Hq_ddot[:,1],label='Calculated',color='b')
-                axs[1,1].plot(pred_Hq_ddot[:,1],label='Predicted',color='r')
-                axs[1,1].set_xlabel('Time Step')
-                axs[0,2].set_title(r'$\mathbf{c(q,\dot{q})}$')
-                axs[0,2].plot(c[:,0],label='Calculated',color='b')
-                axs[0,2].plot(pred_c[:,0],label='Predicted',color='r')
-                axs[1,2].plot(c[:,1],label='Calculated',color='b')
-                axs[1,2].plot(pred_c[:,1],label='Predicted',color='r')
-                axs[1,2].set_xlabel('Time Step')
-                axs[0,3].set_title(r'$\mathbf{g(q)}$')
-                axs[0,3].plot(g[:,0],label='Calculated',color='b')
-                axs[0,3].plot(pred_g[:,0],label='Predicted',color='r')
-                axs[1,3].plot(g[:,1],label='Calculated',color='b')
-                axs[1,3].plot(pred_g[:,1],label='Predicted',color='r')
-                axs[1,3].set_xlabel('Time Step')
-                fig.suptitle('CartPole DeLaN Network')
-                plt.show()
-                plt.close()
-                i += 1
+            c = (c @ batch[:,2:4].unsqueeze(2)).squeeze()
+            if show_plots:
+                if i < num_plots:
+                    fig, axs = plt.subplots(2,4, figsize=(14.0, 8.0), sharex=True)
+                    axs[0,0].plot(label[:,0],label='Calculated',color='b')
+                    axs[0,0].plot(pred_tau[:,0],label='Predicted',color='r')
+                    axs[0,0].legend()
+                    axs[0,0].set_title(r'$\mathbf{\tau}$')
+                    axs[0,0].set_ylabel(r'$Torque_{1}\,(N-m)$')
+                    axs[1,0].plot(label[:,1],label='Calculated',color='b')
+                    axs[1,0].plot(pred_tau[:,1],label='Predicted',color='r')
+                    axs[1,0].set_xlabel('Time Step')
+                    axs[1,0].set_ylabel(r'$Torque_{2}\,(N-m)$')
+                    axs[0,1].set_title(r'$\mathbf{H(q)\ddot{q}}$')
+                    axs[0,1].plot(Hq_ddot[:,0],label='Calculated',color='b')
+                    axs[0,1].plot(pred_Hq_ddot[:,0],label='Predicted',color='r')
+                    axs[1,1].plot(Hq_ddot[:,1],label='Calculated',color='b')
+                    axs[1,1].plot(pred_Hq_ddot[:,1],label='Predicted',color='r')
+                    axs[1,1].set_xlabel('Time Step')
+                    axs[0,2].set_title(r'$\mathbf{c(q,\dot{q})}$')
+                    axs[0,2].plot(c[:,0],label='Calculated',color='b')
+                    axs[0,2].plot(pred_c[:,0],label='Predicted',color='r')
+                    axs[1,2].plot(c[:,1],label='Calculated',color='b')
+                    axs[1,2].plot(pred_c[:,1],label='Predicted',color='r')
+                    axs[1,2].set_xlabel('Time Step')
+                    axs[0,3].set_title(r'$\mathbf{g(q)}$')
+                    axs[0,3].plot(g[:,0],label='Calculated',color='b')
+                    axs[0,3].plot(pred_g[:,0],label='Predicted',color='r')
+                    axs[1,3].plot(g[:,1],label='Calculated',color='b')
+                    axs[1,3].plot(pred_g[:,1],label='Predicted',color='r')
+                    axs[1,3].set_xlabel('Time Step')
+                    fig.suptitle('CartPole DeLaN Network')
+                    plt.show()
+                    plt.close()
+                    i += 1
 
     Ave_MSE = np.mean(np.array(MSEs))
     print("Average Evaluation MSE: {}".format(Ave_MSE))
@@ -232,9 +327,17 @@ if __name__ == '__main__':
 
     # Load the dataset and train and test splits
     print("Loading dataset...")
-    fname = '../cartpole_traj_gen/data/cartpole_trajs_goal_1_to_2.mat'
+    # fname = '../cartpole_traj_gen/data/cartpole_trajs_goal_1_to_2.mat'
+    fname = '../cartpole_traj_gen/data/cartpole_all.mat'
+    # fname = '../cartpole_traj_gen/data/cartpole_all_200hz.mat'
+
+
     data = loadmat(fname)
-    train_trajectories, test_trajectories = generate_train_test_indices(data, num_train_trajectories=4)
+    train_labels = [1,3,4]
+    # train_trajectories, test_trajectories, train_labels = generate_train_test_indices(data, num_train_labels=1, num_samples_per_label=5)
+    train_trajectories, test_trajectories  = select_train_test_indices(data, train_labels=train_labels, num_samples_per_label=5)
+    # train_trajectories, test_trajectories  = generate_one_shot_train_test_indices(data, train_labels=train_labels,test_label=2, num_samples_per_label=5)
+
     TRAJ_train = TrajectoryDataset(data,train_trajectories)
     TRAJ_test = TrajectoryDataset(data,test_trajectories)
 
@@ -253,5 +356,6 @@ if __name__ == '__main__':
     num_epoch = 200 # TODO: Choose an appropriate number of training epochs
 
     # train and evaluate network
-    train(model, trainloader, num_epoch, optimizer, scheduler)
-    evaluate(model, testloader)
+    train(model, criterion, trainloader, device, optimizer, scheduler, num_epoch)
+    evaluate(model, criterion, testloader, device, show_plots=True)
+    print("Training Labels =", train_labels)
