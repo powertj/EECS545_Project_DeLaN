@@ -14,7 +14,7 @@ z0 = [0 pi 0 0].';
 zg = goal;
 
 % controller frequency
-Ts = 1/20;
+Ts = 1/200;
 
 % model
 Nx = 4;

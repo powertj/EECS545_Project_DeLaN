@@ -12,7 +12,7 @@ params.g = 9.81; % gravity
 %%
 goal_x = 1:0.1:2;
 Nsim = length(goal_x);
-sim_length = 20*5;
+sim_length = 200*5;
 trajectories = zeros(Nsim,sim_length,6);
 H = zeros(Nsim,sim_length,2,2);
 c = zeros(Nsim,sim_length,2,2);
@@ -38,7 +38,7 @@ save('cartpole_traj_out.mat', 'trajectories', 'torques', 'g', 'H', 'c')
 control_lim = 185:5:250;
 
 Nsim = length(control_lim);
-sim_length = 20*5;
+sim_length = 200*5;
 trajectories = zeros(Nsim,sim_length,6);
 H = zeros(Nsim,sim_length,2,2);
 c = zeros(Nsim,sim_length,2,2);
@@ -64,7 +64,7 @@ save('cartpole_traj_out.mat', 'trajectories', 'torques', 'g', 'H', 'c')
 control_lim = 185:5:250;
 
 Nsim = length(control_lim);
-sim_length = 20*5;
+sim_length = 200*5;
 trajectories = zeros(Nsim,sim_length,6);
 H = zeros(Nsim,sim_length,2,2);
 c = zeros(Nsim,sim_length,2,2);
@@ -90,7 +90,7 @@ save('cartpole_traj_out.mat', 'trajectories', 'torques', 'g', 'H', 'c')
 
 goal_x = -2:0.1:-1;
 Nsim = length(goal_x);
-sim_length = 20*5;
+sim_length = 200*5;
 trajectories = zeros(Nsim,sim_length,6);
 H = zeros(Nsim,sim_length,2,2);
 c = zeros(Nsim,sim_length,2,2);
@@ -116,7 +116,7 @@ save('cartpole_traj_out.mat', 'trajectories', 'torques', 'g', 'H', 'c')
 
 clear
 
-load('cartpole_trajs_goal_1_to_2.mat')
+load('cartpole_forwards_200hz.mat')
 
 translate_tjs = trajectories;
 translate_tqs = torques;
@@ -124,7 +124,7 @@ translate_g = g;
 translate_H = H;
 translate_c = c;
 
-load('cartpole_trajs_swingup.mat')
+load('cartpole_swingup_200hz.mat')
 
 swingup_tjs = trajectories;
 swingup_tqs = torques;
@@ -132,7 +132,7 @@ swingup_g = g;
 swingup_H = H;
 swingup_c = c;
 
-load('cartpole_trajs_revolution.mat')
+load('cartpole_revolution_200hz.mat')
 
 rev_tjs = trajectories;
 rev_tqs = torques;
@@ -140,7 +140,7 @@ rev_g = g;
 rev_H = H;
 rev_c = c;
 
-load('cartpole_trajs_goal_neg2_to_neg1.mat')
+load('cartpole_backwards_200hz.mat')
 
 backwards_tjs = trajectories;
 backwards_tqs = torques;
@@ -156,5 +156,5 @@ g = cat(1,translate_g,swingup_g,rev_g,backwards_g);
 H = cat(1,translate_H,swingup_H,rev_H,backwards_H);
 c = cat(1,translate_c,swingup_c,rev_c,backwards_c);
 
-save('cartpole_all.mat', 'trajectories', 'torques', 'g', 'H', 'c', 'labels')
+save('cartpole_all_200hz.mat', 'trajectories', 'torques', 'g', 'H', 'c', 'labels')
 
