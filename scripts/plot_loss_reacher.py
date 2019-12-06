@@ -24,7 +24,6 @@ plt.fill_between(train_chars_range,rdn_lower_95conf,rdn_upper_95conf,where=rdn_u
 plt.fill_between(train_chars_range,rffn_lower_95conf,rffn_upper_95conf,where=rffn_upper_95conf >= rffn_lower_95conf, facecolor='blue', interpolate=True, alpha=0.5)
 # plt.yscale('log')
 plt.xticks(train_chars_range)
-# plt.yticks(np.array([10e-6,10e-5,10e-4,10e-3,10e-2,10e-1,10]))
 
 plt.ylabel('MSE')
 plt.xlabel('Unique Training Characters')

@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from dataset import TrajectoryDataset
 from torch.utils.data import DataLoader
+from trajectory_selection import random_train_test_trajectories
 np.random.seed(0)
 
 # Load the dataset and choose test parameters
@@ -16,8 +17,8 @@ fname = '../cartpole_traj_gen/data/cartpole_all.mat'
 data = loadmat(fname)
 print("Done!")
 num_epoch = 200
-num_samples_per_traj = 5
-seeds = np.arange(10)
+num_samples_per_traj = 1
+seeds = np.arange(2)
 train_traj_range = np.arange(1,4)
 cdn_loss = np.zeros((len(train_traj_range),len(seeds)))
 cffn_loss = np.zeros(cdn_loss.shape)
@@ -31,9 +32,9 @@ i = 0
 for num_train_trajs in tqdm(train_traj_range):
     for seed in seeds:
         torch.manual_seed(seed)
-        train_trajectories, test_trajectories, train_labels = cdn.generate_train_test_indices(data, num_train_trajs, num_samples_per_traj)
-        TRAJ_train = TrajectoryDataset(data,train_trajectories)
-        TRAJ_test = TrajectoryDataset(data,test_trajectories)
+        train_trajectories, train_labels, test_trajectories, test_labels  = random_train_test_trajectories(data, num_train_labels=num_train_trajs, num_samples_per_label=1)
+        TRAJ_train = TrajectoryDataset(data, train_trajectories, train_labels)
+        TRAJ_test = TrajectoryDataset(data, test_trajectories, test_labels)
         trainloader = DataLoader(TRAJ_train, batch_size=None)
         testloader = DataLoader(TRAJ_test, batch_size=None)
 

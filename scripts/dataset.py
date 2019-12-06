@@ -3,8 +3,9 @@ import torch
 from torch.utils.data.dataset import Dataset
 
 class TrajectoryDataset(Dataset):
-    def __init__(self, data, indices):
+    def __init__(self, data, indices, labels):
         self.indices = indices
+        self.labels = labels
         self.trajectories = data['trajectories']
         self.torques = data['torques']
         self.g = data['g']
@@ -20,6 +21,6 @@ class TrajectoryDataset(Dataset):
         gTensor = torch.from_numpy(self.g[self.indices[idx]]).float()
         cTensor = torch.from_numpy(self.c[self.indices[idx]]).float()
         HTensor = torch.from_numpy(self.H[self.indices[idx]]).float()
+        label = self.labels[idx]
 
-
-        return (trajTensor, torqueTensor, gTensor, cTensor, HTensor)
+        return (trajTensor, torqueTensor, gTensor, cTensor, HTensor, label)

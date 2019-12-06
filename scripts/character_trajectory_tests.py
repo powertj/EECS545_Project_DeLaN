@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from dataset import TrajectoryDataset
 from torch.utils.data import DataLoader
+from trajectory_selection import random_train_test_chars
 np.random.seed(0)
 
 # Load the dataset and choose test parameters
@@ -15,7 +16,7 @@ data = np.load('../data/trajectories_joint_space.npz', allow_pickle=True)
 print("Done!")
 num_epoch = 150
 num_samples_per_char = 1
-seeds = np.arange(10)
+seeds = np.arange(2)
 train_chars_range = np.concatenate((np.array([1]),np.arange(2,19,step=2)))
 rdn_loss = np.zeros((len(train_chars_range),len(seeds)))
 rffn_loss = np.zeros(rdn_loss.shape)
@@ -29,9 +30,9 @@ i = 0
 for num_train_chars in tqdm(train_chars_range):
     for seed in seeds:
         torch.manual_seed(seed)
-        train_trajectories, test_trajectories = rdn.generate_train_test_indices(data, num_train_chars, num_samples_per_char)
-        TRAJ_train = TrajectoryDataset(data,train_trajectories)
-        TRAJ_test = TrajectoryDataset(data,test_trajectories)
+        train_trajectories, train_labels, test_trajectories, test_labels = random_train_test_chars(data, num_train_chars=num_train_chars, num_samples_per_char=1)
+        TRAJ_train = TrajectoryDataset(data,train_trajectories, train_labels)
+        TRAJ_test = TrajectoryDataset(data,test_trajectories, test_labels)
         trainloader = DataLoader(TRAJ_train, batch_size=None)
         testloader = DataLoader(TRAJ_test, batch_size=None)
 

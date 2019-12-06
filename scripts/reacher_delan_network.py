@@ -1,55 +1,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm # Displays a progress bar
-
 import torch
 from torch import nn
 from torch import optim
 import torch.nn.functional as F
-from torchvision import datasets, transforms
-from torch.utils.data import TensorDataset, Dataset, Subset, DataLoader, random_split
-import random
+from torch.utils.data import DataLoader
 from dataset import TrajectoryDataset
+from trajectory_selection import random_train_test_chars
 # torch.manual_seed(0) # Fix random seed for reproducibility
-
-def generate_train_test_indices(data, num_train_chars=1, num_samples_per_char=1):
-    char_count = {}
-    char_indices = {}
-    train_chars = []
-    test_chars = []
-    train_trajectories = []
-    test_trajectories = []
-
-    for i, label in enumerate(data['labels']):
-        idx = label[0]
-        letter = data['keys'][idx-1][0]
-        if letter in char_count:
-            char_count[letter] += 1
-            char_indices[letter].append(i)
-
-        else:
-            test_chars.append(letter)
-            char_count[letter] = 1
-            char_indices[letter] = [i]
-
-    for i in range(num_train_chars):
-        if len(test_chars) > 0:
-            train_char_idx = random.randint(0,len(test_chars)-1)
-            train_char = test_chars.pop(train_char_idx)
-            train_chars.append(train_char)
-            if num_samples_per_char < len(char_indices[train_char]):
-                train_trajectories += char_indices[train_char][:num_samples_per_char]
-            else:
-                train_trajectories += char_indices[train_char]
-
-    for test_char in test_chars:
-            if num_samples_per_char < len(char_indices[test_char]):
-                test_trajectories += char_indices[test_char][:num_samples_per_char]
-            else:
-                test_trajectories += char_indices[test_char]
-
-    return train_trajectories, test_trajectories
-
 
 class Reacher_DeLaN_Network(nn.Module):
     def __init__(self):
@@ -60,29 +19,18 @@ class Reacher_DeLaN_Network(nn.Module):
         h2_dim = 64
         # joint angle input layer
         self.fc1 = nn.Linear(input_dim, h1_dim)
-        #self.fc1b = nn.Linear(h1_dim, h1_dim)
-        # torch.nn.init.zeros_(self.fc1.weight)
-        # torch.nn.init.zeros_(self.fc1.bias)
 
         # 1st hidden layer
         self.fc1a = nn.Linear(h1_dim, h2_dim)
-        # torch.nn.init.zeros_(self.fc1a.weight)
-        # torch.nn.init.zeros_(self.fc1a.bias)
 
         # gravity layer
         self.fc2 = nn.Linear(h2_dim, input_dim) 
-        # torch.nn.init.zeros_(self.fc2.weight)
-        # torch.nn.init.zeros_(self.fc2.bias)
 
         # ld layer
         self.fc3 = nn.Linear(h2_dim, input_dim)
-        # torch.nn.init.ones_(self.fc3.weight)
-        # torch.nn.init.ones_(self.fc3.bias)
 
         # lo layer
         self.fc4 = nn.Linear(h2_dim, 1)
-        # torch.nn.init.zeros_(self.fc4.weight)
-        # torch.nn.init.zeros_(self.fc4.bias)
 
         self.act_fn = F.leaky_relu
         self.neg_slope = -0.01
@@ -94,7 +42,6 @@ class Reacher_DeLaN_Network(nn.Module):
         n = x.shape[0]
         q, q_dot, q_ddot = torch.split(x,[d,d,d], dim = 1)
 
-        # q.requires_grad = True
         h1 = self.act_fn(self.fc1(q))
         h2 = self.act_fn(self.fc1a(h1))
         
@@ -112,7 +59,7 @@ class Reacher_DeLaN_Network(nn.Module):
         dRelu_fc1a = torch.where(h2 > 0, torch.ones(h2.shape), self.neg_slope * torch.ones(h2.shape))
         dh2_dh1 = torch.diag_embed(dRelu_fc1a) @ self.fc1a.weight
 
-        dRelu_fc3 = torch.sigmoid(h3)#torch.where(ld > 0, torch.ones(ld.shape), 0.0 * torch.ones(ld.shape))
+        dRelu_fc3 = torch.sigmoid(h3) #torch.where(ld > 0, torch.ones(ld.shape), 0.0 * torch.ones(ld.shape))
 
         dld_dh2 = torch.diag_embed(dRelu_fc3) @ self.fc3.weight
         dlo_dh2 = self.fc4.weight
@@ -181,13 +128,13 @@ def train(model, criterion, loader, device, optimizer, scheduler, num_epoch=10):
     model.train() # Set the model to training mode
     for i in range(num_epoch):
         running_loss = []
-        for batch, label, _, _, _ in tqdm(loader):
-            batch = batch.to(device)
-            label = label.to(device)
+        for state, tau, _, _, _, _ in tqdm(loader):
+            state = state.to(device)
+            tau = tau.to(device)
             optimizer.zero_grad() # Clear gradients from the previous iteration
-            pred_tau, pred_H, pred_c, pred_g = model(batch) # This will call Network.forward() that you implement
+            pred_tau, pred_H, pred_c, pred_g = model(state) # This will call Network.forward() that you implement
 
-            loss = criterion(pred_tau, label) # Calculate the loss
+            loss = criterion(pred_tau, tau) # Calculate the loss
             running_loss.append(loss.item())
             loss.backward() # Backprop gradients to all tensors in the network
             torch.nn.utils.clip_grad_norm(model.parameters(), 10.0)
@@ -204,26 +151,26 @@ def evaluate(model, criterion, loader, device, show_plots=False, num_plots=1): #
     MSEs = []
     i = 0
     with torch.no_grad(): # Do not calculate grident to speed up computation
-        for batch, label, g, c, h in tqdm(loader):
-            batch = batch.to(device)
-            label = label.to(device)
-            pred_tau, pred_Hq_ddot, pred_c, pred_g = model(batch)
+        for state, tau, g, c, h, label in tqdm(loader):
+            state = state.to(device)
+            tau = tau.to(device)
+            pred_tau, pred_Hq_ddot, pred_c, pred_g = model(state)
 
-            MSE_error = criterion(pred_tau, label)
+            MSE_error = criterion(pred_tau, tau)
             MSEs.append(MSE_error.item())
-            Hq_ddot = (h @ batch[:,-2:].unsqueeze(2)).squeeze()
+            Hq_ddot = (h @ state[:,-2:].unsqueeze(2)).squeeze()
             if show_plots:
                 if i < num_plots:
                     fig, axs = plt.subplots(2,4, figsize=(14.0, 8.0), sharex=True)
-                    axs[0,0].plot(label[:,0],label='Calculated',color='b')
+                    axs[0,0].plot(tau[:,0],label='Calculated',color='b')
                     axs[0,0].plot(pred_tau[:,0],label='Predicted',color='r')
                     axs[0,0].legend()
                     axs[0,0].set_title(r'$\mathbf{\tau}$')
-                    axs[0,0].set_ylabel(r'$Torque_{1}\,(N-m)$')
-                    axs[1,0].plot(label[:,1],label='Calculated',color='b')
+                    axs[0,0].set_ylabel('Torque 1 (N-m)')
+                    axs[1,0].plot(tau[:,1],label='Calculated',color='b')
                     axs[1,0].plot(pred_tau[:,1],label='Predicted',color='r')
                     axs[1,0].set_xlabel('Time Step')
-                    axs[1,0].set_ylabel(r'$Torque_{2}\,(N-m)$')
+                    axs[1,0].set_ylabel('Torque 2 (N-m)')
                     axs[0,1].set_title(r'$\mathbf{H(q)\ddot{q}}$')
                     axs[0,1].plot(Hq_ddot[:,0],label='Calculated',color='b')
                     axs[0,1].plot(pred_Hq_ddot[:,0],label='Predicted',color='r')
@@ -242,7 +189,7 @@ def evaluate(model, criterion, loader, device, show_plots=False, num_plots=1): #
                     axs[1,3].plot(g[:,1],label='Calculated',color='b')
                     axs[1,3].plot(pred_g[:,1],label='Predicted',color='r')
                     axs[1,3].set_xlabel('Time Step')
-                    fig.suptitle('Reacher DeLaN Network')
+                    fig.suptitle('Reacher DeLaN Network Trajectory {}'.format(str(label)))
                     plt.show()
                     plt.close()
                     i += 1
@@ -257,24 +204,25 @@ if __name__ == '__main__':
     # Load the dataset and train and test splits
     print("Loading dataset...")
     data = np.load('../data/trajectories_joint_space.npz', allow_pickle=True)
-    train_trajectories, test_trajectories = generate_train_test_indices(data, num_train_chars=8, num_samples_per_char=2)
-    TRAJ_train = TrajectoryDataset(data,train_trajectories)
-    TRAJ_test = TrajectoryDataset(data,test_trajectories)
+    train_trajectories, train_labels, test_trajectories, test_labels = random_train_test_chars(data, num_train_chars=1, num_samples_per_char=2)
+    TRAJ_train = TrajectoryDataset(data, train_trajectories, train_labels)
+    TRAJ_test = TrajectoryDataset(data, test_trajectories, test_labels)
 
     print("Done!")
     trainloader = DataLoader(TRAJ_train, batch_size=None)
     testloader = DataLoader(TRAJ_test, batch_size=None)
 
     # create model and specify hyperparameters
-    device = "cuda" if torch.cuda.is_available() else "cpu" # Configure device
+    # device = "cuda" if torch.cuda.is_available() else "cpu" # Configure device
+    device = "cpu" # Configure device
+
     model = Reacher_DeLaN_Network().to(device)
     criterion = nn.MSELoss() # Specify the loss layer
-    # TODO: Modify the line below, experiment with different optimizers and parameters (such as learning rate)
+    # Modify the line below, experiment with different optimizers and parameters (such as learning rate)
     optimizer = optim.Adam(model.parameters(), lr=5e-3, weight_decay=1e-3) #Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=40, gamma=0.5)
 
-    num_epoch = 200 # TODO: Choose an appropriate number of training epochs
-
+    num_epoch = 200 # Choose an appropriate number of training epochs
 
     # train and evaluate network
     train(model, criterion, trainloader, device, optimizer, scheduler, num_epoch)

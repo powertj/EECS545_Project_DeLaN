@@ -1,54 +1,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm # Displays a progress bar
-
 import torch
 from torch import nn
 from torch import optim
 import torch.nn.functional as F
-from torchvision import datasets, transforms
-from torch.utils.data import TensorDataset, Dataset, Subset, DataLoader, random_split
-import random
+from torch.utils.data import DataLoader
 from dataset import TrajectoryDataset
+from trajectory_selection import random_train_test_chars
 # torch.manual_seed(0) # Fix random seed for reproducibility
-
-def generate_train_test_indices(data, num_train_chars=1, num_samples_per_char=1):
-    char_count = {}
-    char_indices = {}
-    train_chars = []
-    test_chars = []
-    train_trajectories = []
-    test_trajectories = []
-
-    for i, label in enumerate(data['labels']):
-        idx = label[0]
-        letter = data['keys'][idx-1][0]
-        if letter in char_count:
-            char_count[letter] += 1
-            char_indices[letter].append(i)
-
-        else:
-            test_chars.append(letter)
-            char_count[letter] = 1
-            char_indices[letter] = [i]
-
-    for i in range(num_train_chars):
-        if len(test_chars) > 0:
-            train_char_idx = random.randint(0,len(test_chars)-1)
-            train_char = test_chars.pop(train_char_idx)
-            train_chars.append(train_char)
-            if num_samples_per_char < len(char_indices[train_char]):
-                train_trajectories += char_indices[train_char][:num_samples_per_char]
-            else:
-                train_trajectories += char_indices[train_char]
-
-    for test_char in test_chars:
-            if num_samples_per_char < len(char_indices[test_char]):
-                test_trajectories += char_indices[test_char][:num_samples_per_char]
-            else:
-                test_trajectories += char_indices[test_char]
-
-    return train_trajectories, test_trajectories
 
 class Reacher_FF_Network(nn.Module):
     def __init__(self):
@@ -73,12 +33,12 @@ def train(model, criterion, loader, device, optimizer, scheduler, num_epoch = 10
     model.train() # Set the model to training mode
     for i in range(num_epoch):
         running_loss = []
-        for batch, label, _, _, _ in tqdm(loader):
-            batch = batch.to(device)
-            label = label.to(device)
+        for state, tau, _, _, _, _ in tqdm(loader):
+            state = state.to(device)
+            tau = tau.to(device)
             optimizer.zero_grad() # Clear gradients from the previous iteration
-            pred = model(batch) # This will call Network.forward() that you implement
-            loss = criterion(pred, label) # Calculate the loss
+            pred = model(state) # This will call Network.forward() that you implement
+            loss = criterion(pred, tau) # Calculate the loss
             running_loss.append(loss.item())
             loss.backward() # Backprop gradients to all tensors in the network
             torch.nn.utils.clip_grad_norm(model.parameters(), 10.0)
@@ -93,25 +53,24 @@ def evaluate(model, criterion, loader, device, show_plots=False, num_plots=1): #
     MSEs = []
     i = 0
     with torch.no_grad(): # Do not calculate grident to speed up computation
-        for batch, label, _, _, _ in tqdm(loader):
-            batch = batch.to(device)
-            label = label.to(device)
-            pred = model(batch)
-            MSE_error = criterion(pred, label)
+        for state, tau, _, _, _, label in tqdm(loader):
+            state = state.to(device)
+            tau = tau.to(device)
+            pred = model(state)
+            MSE_error = criterion(pred, tau)
             MSEs.append(MSE_error.item())
             if show_plots:
                 if i < num_plots:
                     fig, axs = plt.subplots(2, sharex=True)
-                    axs[0].plot(label[:,0],label='Calculated',color='b')
+                    axs[0].plot(tau[:,0],label='Calculated',color='b')
                     axs[0].plot(pred[:,0],label='Predicted',color='r')
                     axs[0].legend()
                     axs[0].set_ylabel(r'$\tau_1\,(N-m)$')
-                    axs[1].plot(label[:,1],label='Calculated',color='b')
+                    axs[1].plot(tau[:,1],label='Calculated',color='b')
                     axs[1].plot(pred[:,1],label='Predicted',color='r')
-                    axs[1].legend()
                     axs[1].set_xlabel('Time Step')
                     axs[1].set_ylabel(r'$\tau_2\,(N-m)$')
-                    fig.suptitle('Reacher Feed Forward Network')
+                    fig.suptitle('Reacher FF-NN Trajectory {}'.format(str(label)))
                     plt.show()
                     plt.close()
                     i += 1
@@ -124,15 +83,16 @@ if __name__ == '__main__':
     # Load the dataset and train and test splits
     print("Loading dataset...")
     data = np.load('../data/trajectories_joint_space.npz', allow_pickle=True)
-    train_trajectories, test_trajectories = generate_train_test_indices(data, num_train_chars=2, num_samples_per_char=2)
-    TRAJ_train = TrajectoryDataset(data,train_trajectories)
-    TRAJ_test = TrajectoryDataset(data,test_trajectories)
+    train_trajectories, train_labels, test_trajectories, test_labels = random_train_test_chars(data, num_train_chars=1, num_samples_per_char=2)
+    TRAJ_train = TrajectoryDataset(data,train_trajectories, train_labels)
+    TRAJ_test = TrajectoryDataset(data,test_trajectories, test_labels)
     print("Done!")
     trainloader = DataLoader(TRAJ_train, batch_size=None)
     testloader = DataLoader(TRAJ_test, batch_size=None)
 
     # create model and specify hyperparameters
-    device = "cuda" if torch.cuda.is_available() else "cpu" # Configure device
+    # device = "cuda" if torch.cuda.is_available() else "cpu" # Configure device
+    device = "cpu"
     model = Reacher_FF_Network().to(device)
     criterion = nn.MSELoss() # Specify the loss layer
     # TODO: Modify the line below, experiment with different optimizers and parameters (such as learning rate)
@@ -142,4 +102,4 @@ if __name__ == '__main__':
 
     # train and evaluate network
     train(model, criterion, trainloader, device, optimizer, scheduler, num_epoch)
-    evaluate(model, criterion, testloader, device)
+    evaluate(model, criterion, testloader, device, show_plots=True)
