@@ -12,37 +12,26 @@ from trajectory_selection import random_train_test_trajectories, select_train_te
 # torch.manual_seed(0) # Fix random seed for reproducibility
 
 class CartPole_DeLaN_Network(nn.Module):
-    def __init__(self):
+    def __init__(self,device):
         super().__init__()
-        # TODO: Design your own network, define layers here.
+        self.device = device
         input_dim = 2
         h1_dim = 64
         h2_dim = 64
         # joint angle input layer
         self.fc1 = nn.Linear(input_dim, h1_dim)
-        #self.fc1b = nn.Linear(h1_dim, h1_dim)
-        # torch.nn.init.zeros_(self.fc1.weight)
-        # torch.nn.init.zeros_(self.fc1.bias)
 
         # 1st hidden layer
         self.fc1a = nn.Linear(h1_dim, h2_dim)
-        # torch.nn.init.zeros_(self.fc1a.weight)
-        # torch.nn.init.zeros_(self.fc1a.bias)
 
         # gravity layer
         self.fc2 = nn.Linear(h2_dim, input_dim) 
-        # torch.nn.init.zeros_(self.fc2.weight)
-        # torch.nn.init.zeros_(self.fc2.bias)
 
         # ld layer
         self.fc3 = nn.Linear(h2_dim, input_dim)
-        # torch.nn.init.ones_(self.fc3.weight)
-        # torch.nn.init.ones_(self.fc3.bias)
 
         # lo layer
         self.fc4 = nn.Linear(h2_dim, 1)
-        # torch.nn.init.zeros_(self.fc4.weight)
-        # torch.nn.init.zeros_(self.fc4.bias)
 
         self.act_fn = F.leaky_relu
         self.neg_slope = -0.01
@@ -66,10 +55,10 @@ class CartPole_DeLaN_Network(nn.Module):
         ld = F.softplus(h3)
         lo = self.fc4(h2)
 
-        dRelu_fc1 = torch.where(h1 > 0, torch.ones(h1.shape), self.neg_slope * torch.ones(h1.shape))
+        dRelu_fc1 = torch.where(h1 > 0, torch.ones(h1.shape,device=self.device), self.neg_slope * torch.ones(h1.shape,device=self.device))
         dh1_dq = torch.diag_embed(dRelu_fc1) @ self.fc1.weight
 
-        dRelu_fc1a = torch.where(h2 > 0, torch.ones(h2.shape), self.neg_slope * torch.ones(h2.shape))
+        dRelu_fc1a = torch.where(h2 > 0, torch.ones(h2.shape,device=self.device), self.neg_slope * torch.ones(h2.shape,device=self.device))
         dh2_dh1 = torch.diag_embed(dRelu_fc1a) @ self.fc1a.weight
 
         dRelu_fc3 = torch.sigmoid(h3)#torch.where(ld > 0, torch.ones(ld.shape), 0.0 * torch.ones(ld.shape))
@@ -115,7 +104,7 @@ class CartPole_DeLaN_Network(nn.Module):
 
         epsilon = 1e-9   #small number to ensure positive definiteness of H
 
-        H = L @ L.transpose(1, 2) + epsilon * torch.eye(d)
+        H = L @ L.transpose(1, 2) + epsilon * torch.eye(d, device=self.device)
 
         # Time derivative of Mass Matrix
         dH_dt = L @ dL_dt.permute(0,2,1) + dL_dt @ L.permute(0,2,1)
@@ -133,7 +122,7 @@ class CartPole_DeLaN_Network(nn.Module):
         tau = H @ q_ddot.view(n,d,1) + c + g.view(n,d,1)
 
         #set uncontrolled torque to zero
-        # tau = torch.diag_embed(torch.cat((torch.ones(n,1), torch.zeros(n,1)),dim=1)) @ tau
+        tau = torch.diag_embed(torch.cat((torch.ones((n,1),device=self.device), torch.zeros((n,1),device=self.device)),dim=1)) @ tau
         # The loss layer will be applied outside Network class
         return (tau.squeeze(), (H @ q_ddot.view(n,d,1)).squeeze(), c.squeeze(), g.squeeze())
 
@@ -170,16 +159,23 @@ def evaluate(model, criterion, loader, device, show_plots=False, num_plots=1): #
         for state, tau, g, c, h, label in tqdm(loader):
             state = state.to(device)
             tau = tau.to(device)
+            g = g.to(device)
+            c = c.to(device)
+            h = h.to(device)
+
             pred_tau, pred_Hq_ddot, pred_c, pred_g = model(state)
 
             MSE_error = criterion(pred_tau, tau)
             MSEs.append(MSE_error.item())
             Hq_ddot = (h @ state[:,-2:].unsqueeze(2)).squeeze()
             c = (c @ state[:,2:4].unsqueeze(2)).squeeze()
+            # tau_calc = Hq_ddot + c + g
+            # if label == 3:
+            #     np.savetxt('cartpole_delan_3_traj.txt', np.concatenate((tau,Hq_ddot,c,g,pred_tau,pred_Hq_ddot,pred_c,pred_g),axis=1))
             if show_plots:
                 if i < num_plots:
                     fig, axs = plt.subplots(2,4, figsize=(14.0, 8.0), sharex=True)
-                    axs[0,0].plot(tau[:,0],label='Calculated',color='b')
+                    axs[0,0].plot(tau[:,0],label='Simulated',color='b')
                     axs[0,0].plot(pred_tau[:,0],label='Predicted',color='r')
                     axs[0,0].legend()
                     axs[0,0].set_title(r'$\mathbf{\tau}$')
@@ -220,32 +216,40 @@ if __name__ == '__main__':
 
     # Load the dataset and train and test splits
     print("Loading dataset...")
-    fname = '../cartpole_traj_gen/data/cartpole_all.mat'
-    # fname = '../cartpole_traj_gen/data/cartpole_all_200hz.mat'
+    # fname = '../cartpole_traj_gen/data/cartpole_all.mat'
+    fname = '../cartpole_traj_gen/data/cartpole_all_200hz.mat'
     data = loadmat(fname)
-    # train_trajectories, train_labels, test_trajectories, test_labels  = random_train_test_trajectories(data, num_train_labels=1, num_samples_per_label=5)
-    train_trajectories, train_labels, test_trajectories, test_labels  = select_train_test_trajectories(data, train_label_types=[1,3,4], num_samples_per_label=5)
 
-    TRAJ_train = TrajectoryDataset(data, train_trajectories, train_labels)
-    TRAJ_test = TrajectoryDataset(data, test_trajectories, test_labels)
+    num_trials = 10
+    MSEs = np.zeros(num_trials)
+    for i in range(num_trials):
+        # train_trajectories, train_labels, test_trajectories, test_labels  = random_train_test_trajectories(data, num_train_labels=1, num_samples_per_label=5)
+        train_trajectories, train_labels, test_trajectories, test_labels  = select_train_test_trajectories(data, train_label_types=[1,2,4], num_samples_per_label=5)
 
-    print("Done!")
-    trainloader = DataLoader(TRAJ_train, batch_size=None)
-    testloader = DataLoader(TRAJ_test, batch_size=None)
+        TRAJ_train = TrajectoryDataset(data, train_trajectories, train_labels)
+        TRAJ_test = TrajectoryDataset(data, test_trajectories, test_labels)
 
-    # create model and specify hyperparameters
-    # device = "cuda" if torch.cuda.is_available() else "cpu" # Configure device
-    device = "cpu"
+        print("Done!")
+        trainloader = DataLoader(TRAJ_train, batch_size=None)
+        testloader = DataLoader(TRAJ_test, batch_size=None)
 
-    model = CartPole_DeLaN_Network().to(device)
-    criterion = nn.MSELoss() # Specify the loss layer
-    # TODO: Modify the line below, experiment with different optimizers and parameters (such as learning rate)
-    optimizer = optim.Adam(model.parameters(), lr=5e-3, weight_decay=1e-3) #Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=40, gamma=0.5)
+        # create model and specify hyperparameters
+        device = "cuda" if torch.cuda.is_available() else "cpu" # Configure device
+        # device = "cpu"
 
-    num_epoch = 200 # TODO: Choose an appropriate number of training epochs
+        model = CartPole_DeLaN_Network(device).to(device)
+        criterion = nn.MSELoss() # Specify the loss layer
+        # Modify the line below, experiment with different optimizers and parameters (such as learning rate)
+        optimizer = optim.Adam(model.parameters(), lr=5e-3, weight_decay=1e-3) #Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=40, gamma=0.5)
 
-    # train and evaluate network
-    train(model, criterion, trainloader, device, optimizer, scheduler, num_epoch)
-    evaluate(model, criterion, testloader, device, show_plots=True)
-    print("Training Labels =", train_labels)
+        num_epoch = 200 # Choose an appropriate number of training epochs
+
+        # train and evaluate network
+        train(model, criterion, trainloader, device, optimizer, scheduler, num_epoch)
+        MSEs[i] = evaluate(model, criterion, testloader, device, show_plots=False)
+        # print("Training Labels =", train_labels)
+    
+    print('MSEs',MSEs)
+    print('Mean MSE =',np.mean(MSEs))
+    print('Std = ',np.std(MSEs))

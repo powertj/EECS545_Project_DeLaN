@@ -61,6 +61,8 @@ def evaluate(model, criterion, loader, device, show_plots=False, num_plots=1): #
             MSEs.append(MSE_error.item())
             if show_plots:
                 if i < num_plots:
+                    if label == 'a':
+                        np.savetxt('reacher_ff_1_char.txt', np.concatenate((tau,pred),axis=1))
                     fig, axs = plt.subplots(2, sharex=True)
                     axs[0].plot(tau[:,0],label='Calculated',color='b')
                     axs[0].plot(pred[:,0],label='Predicted',color='r')
@@ -83,7 +85,7 @@ if __name__ == '__main__':
     # Load the dataset and train and test splits
     print("Loading dataset...")
     data = np.load('../data/trajectories_joint_space.npz', allow_pickle=True)
-    train_trajectories, train_labels, test_trajectories, test_labels = random_train_test_chars(data, num_train_chars=1, num_samples_per_char=2)
+    train_trajectories, train_labels, test_trajectories, test_labels = random_train_test_chars(data, num_train_chars=1, num_samples_per_char=1)
     TRAJ_train = TrajectoryDataset(data,train_trajectories, train_labels)
     TRAJ_test = TrajectoryDataset(data,test_trajectories, test_labels)
     print("Done!")
@@ -91,15 +93,14 @@ if __name__ == '__main__':
     testloader = DataLoader(TRAJ_test, batch_size=None)
 
     # create model and specify hyperparameters
-    # device = "cuda" if torch.cuda.is_available() else "cpu" # Configure device
-    device = "cpu"
+    device = "cuda" if torch.cuda.is_available() else "cpu" # Configure device
     model = Reacher_FF_Network().to(device)
     criterion = nn.MSELoss() # Specify the loss layer
-    # TODO: Modify the line below, experiment with different optimizers and parameters (such as learning rate)
+    # Modify the line below, experiment with different optimizers and parameters (such as learning rate)
     optimizer = optim.Adam(model.parameters(), lr=5e-3, weight_decay=1e-4) # Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=40, gamma=0.5)
-    num_epoch = 200 # TODO: Choose an appropriate number of training epochs
+    num_epoch = 200 # Choose an appropriate number of training epochs
 
     # train and evaluate network
     train(model, criterion, trainloader, device, optimizer, scheduler, num_epoch)
-    evaluate(model, criterion, testloader, device, show_plots=True)
+    evaluate(model, criterion, testloader, device, show_plots=False)

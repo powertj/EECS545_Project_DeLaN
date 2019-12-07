@@ -11,9 +11,9 @@ from trajectory_selection import random_train_test_chars
 # torch.manual_seed(0) # Fix random seed for reproducibility
 
 class Reacher_DeLaN_Network(nn.Module):
-    def __init__(self):
+    def __init__(self, device):
         super().__init__()
-        # TODO: Design your own network, define layers here.
+        self.device = device
         input_dim = 2
         h1_dim = 64
         h2_dim = 64
@@ -53,10 +53,10 @@ class Reacher_DeLaN_Network(nn.Module):
         ld = F.softplus(h3)
         lo = self.fc4(h2)
 
-        dRelu_fc1 = torch.where(h1 > 0, torch.ones(h1.shape), self.neg_slope * torch.ones(h1.shape))
+        dRelu_fc1 = torch.where(h1 > 0, torch.ones(h1.shape, device=self.device), self.neg_slope * torch.ones(h1.shape,device=self.device))
         dh1_dq = torch.diag_embed(dRelu_fc1) @ self.fc1.weight
 
-        dRelu_fc1a = torch.where(h2 > 0, torch.ones(h2.shape), self.neg_slope * torch.ones(h2.shape))
+        dRelu_fc1a = torch.where(h2 > 0, torch.ones(h2.shape, device=self.device), self.neg_slope * torch.ones(h2.shape,device=self.device))
         dh2_dh1 = torch.diag_embed(dRelu_fc1a) @ self.fc1a.weight
 
         dRelu_fc3 = torch.sigmoid(h3) #torch.where(ld > 0, torch.ones(ld.shape), 0.0 * torch.ones(ld.shape))
@@ -102,7 +102,7 @@ class Reacher_DeLaN_Network(nn.Module):
 
         epsilon = 1e-9   #small number to ensure positive definiteness of H
 
-        H = L @ L.transpose(1, 2) + epsilon * torch.eye(d)
+        H = L @ L.transpose(1, 2) + epsilon * torch.eye(d,device=self.device)
 
         # Time derivative of Mass Matrix
         dH_dt = L @ dL_dt.permute(0,2,1) + dL_dt @ L.permute(0,2,1)
@@ -154,11 +154,16 @@ def evaluate(model, criterion, loader, device, show_plots=False, num_plots=1): #
         for state, tau, g, c, h, label in tqdm(loader):
             state = state.to(device)
             tau = tau.to(device)
+            g = g.to(device)
+            c = c.to(device)
+            h = h.to(device)
             pred_tau, pred_Hq_ddot, pred_c, pred_g = model(state)
 
             MSE_error = criterion(pred_tau, tau)
             MSEs.append(MSE_error.item())
             Hq_ddot = (h @ state[:,-2:].unsqueeze(2)).squeeze()
+            # if label == 'a':
+            #     np.savetxt('reacher_delan_15_char.txt', np.concatenate((tau,Hq_ddot,c,g,pred_tau,pred_Hq_ddot,pred_c,pred_g),axis=1))
             if show_plots:
                 if i < num_plots:
                     fig, axs = plt.subplots(2,4, figsize=(14.0, 8.0), sharex=True)
@@ -204,7 +209,8 @@ if __name__ == '__main__':
     # Load the dataset and train and test splits
     print("Loading dataset...")
     data = np.load('../data/trajectories_joint_space.npz', allow_pickle=True)
-    train_trajectories, train_labels, test_trajectories, test_labels = random_train_test_chars(data, num_train_chars=1, num_samples_per_char=2)
+    train_trajectories, train_labels, test_trajectories, test_labels = random_train_test_chars(data, num_train_chars=15, num_samples_per_char=1)
+    print("Test Chars =",test_labels)
     TRAJ_train = TrajectoryDataset(data, train_trajectories, train_labels)
     TRAJ_test = TrajectoryDataset(data, test_trajectories, test_labels)
 
@@ -213,10 +219,9 @@ if __name__ == '__main__':
     testloader = DataLoader(TRAJ_test, batch_size=None)
 
     # create model and specify hyperparameters
-    # device = "cuda" if torch.cuda.is_available() else "cpu" # Configure device
-    device = "cpu" # Configure device
+    device = "cuda" if torch.cuda.is_available() else "cpu" # Configure device
 
-    model = Reacher_DeLaN_Network().to(device)
+    model = Reacher_DeLaN_Network(device).to(device)
     criterion = nn.MSELoss() # Specify the loss layer
     # Modify the line below, experiment with different optimizers and parameters (such as learning rate)
     optimizer = optim.Adam(model.parameters(), lr=5e-3, weight_decay=1e-3) #Specify optimizer and assign trainable parameters to it, weight_decay is L2 regularization strength
@@ -226,4 +231,6 @@ if __name__ == '__main__':
 
     # train and evaluate network
     train(model, criterion, trainloader, device, optimizer, scheduler, num_epoch)
-    evaluate(model, criterion, testloader, device, show_plots=True)
+    evaluate(model, criterion, testloader, device, show_plots=False)
+    print("Training Labels =", train_labels)
+
