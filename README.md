@@ -7,6 +7,10 @@ Requires python 3.5 +
 
 install via pip install -e .
 
+Reacher experiment from paper can be run by running:
+
+`python train.py --experiment Reacher --model delan` 
+
 Custom gym environments:
 
 `DoublePendulum-v0` 
