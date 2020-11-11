@@ -2,7 +2,7 @@ actionlib==1.12.0
 angles==1.9.12
 attrs==19.3.0
 backcall==0.1.0
-bleach==3.1.0
+bleach==3.1.4
 bondpy==1.8.5
 camera-calibration==1.15.0
 camera-calibration-parsers==1.11.13
